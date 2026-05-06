@@ -61,6 +61,10 @@ export function createContextMenuControllerApi({
         }
     }
 
+    function closeContextMenu() {
+        contextMenu?.classList.add('hidden');
+    }
+
     function openConnectionCreatePopup(popupState) {
         if (!connectionCreatePopup) return;
         state.connectionCreatePopup = popupState;
@@ -127,7 +131,7 @@ export function createContextMenuControllerApi({
             } else if (connectionCreatePopup && !connectionCreatePopup.contains(e.target)) {
                 closeConnectionCreatePopup();
             }
-            if (!contextMenu.contains(e.target)) contextMenu.classList.add('hidden');
+            if (!contextMenu.contains(e.target)) closeContextMenu();
 
             if (e.target.id === 'canvas-container' && !state.justDragged) {
                 clearSelection();
@@ -137,31 +141,37 @@ export function createContextMenuControllerApi({
 
         documentRef.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                closeContextMenu();
                 closeConnectionCreatePopup();
             }
         });
 
         contextMenu.querySelectorAll('.context-menu-item').forEach((item) => {
-            item.addEventListener('click', () => {
-                if (item.id === 'context-menu-run-to-here') {
-                    if (state.contextMenuNodeId) {
-                        runWorkflow({
-                            mode: 'target-node',
-                            targetNodeId: state.contextMenuNodeId
-                        });
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    if (item.id === 'context-menu-run-to-here') {
+                        if (state.contextMenuNodeId) {
+                            runWorkflow({
+                                mode: 'target-node',
+                                targetNodeId: state.contextMenuNodeId
+                            });
+                        }
+                    } else if (item.id === 'context-menu-run-selected') {
+                        if (state.selectedNodes.size > 0) {
+                            runWorkflow({
+                                mode: 'selected-only',
+                                selectedNodeIds: Array.from(state.selectedNodes)
+                            });
+                        }
+                    } else if (item.dataset.type) {
+                        const pos = viewportApi.screenToCanvas(state.contextMenu.x, state.contextMenu.y);
+                        addNode(item.dataset.type, pos.x, pos.y);
                     }
-                } else if (item.id === 'context-menu-run-selected') {
-                    if (state.selectedNodes.size > 0) {
-                        runWorkflow({
-                            mode: 'selected-only',
-                            selectedNodeIds: Array.from(state.selectedNodes)
-                        });
-                    }
-                } else if (item.dataset.type) {
-                    const pos = viewportApi.screenToCanvas(state.contextMenu.x, state.contextMenu.y);
-                    addNode(item.dataset.type, pos.x, pos.y);
+                } finally {
+                    closeContextMenu();
                 }
-                contextMenu.classList.add('hidden');
             });
         });
 
@@ -171,6 +181,7 @@ export function createContextMenuControllerApi({
     return {
         initContextMenu,
         openConnectionCreatePopup,
+        closeContextMenu,
         closeConnectionCreatePopup
     };
 }

@@ -45,7 +45,7 @@ export function createExecutionCoreApi({
 }) {
     function requestNodeFit(nodeId) {
         windowRef.requestAnimationFrame(() => {
-            fitNodeToContent(nodeId, { allowShrink: true });
+            fitNodeToContent(nodeId);
         });
     }
 

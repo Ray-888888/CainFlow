@@ -32,8 +32,8 @@ export function createNodeDomBindingsApi({
     showToast,
     scheduleSave,
     debounce,
-    adjustTextareaHeight,
     fitNodeToContent = () => {},
+    getNodeMinimumSizeFromLifecycle = null,
     documentRef = document
 }) {
     const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container';
@@ -112,8 +112,8 @@ export function createNodeDomBindingsApi({
         return true;
     }
 
-    function bindExpandableTextareaResize(nodeId, textarea) {
-        if (!textarea || typeof ResizeObserver === 'undefined') return;
+    function bindExpandableElementResize(nodeId, element) {
+        if (!element || typeof ResizeObserver === 'undefined') return;
 
         let frameId = null;
         const scheduleFit = () => {
@@ -122,23 +122,23 @@ export function createNodeDomBindingsApi({
             frameId = requestAnimationFrame(() => {
                 frameId = null;
                 if (state.resizing?.nodeId === nodeId) return;
-                fitNodeToContent(nodeId, { allowShrink: true });
+                fitNodeToContent(nodeId, { allowShrink: true, reason: 'element-resize' });
             });
         };
 
         const observer = new ResizeObserver(() => scheduleFit());
-        observer.observe(textarea);
+        observer.observe(element);
 
-        textarea.addEventListener('mouseup', scheduleFit);
-        textarea.addEventListener('touchend', scheduleFit);
+        element.addEventListener('mouseup', scheduleFit);
+        element.addEventListener('touchend', scheduleFit);
 
-        if (!Array.isArray(textarea._cleanupFns)) {
-            textarea._cleanupFns = [];
+        if (!Array.isArray(element._cleanupFns)) {
+            element._cleanupFns = [];
         }
-        textarea._cleanupFns.push(() => {
+        element._cleanupFns.push(() => {
             observer.disconnect();
-            textarea.removeEventListener('mouseup', scheduleFit);
-            textarea.removeEventListener('touchend', scheduleFit);
+            element.removeEventListener('mouseup', scheduleFit);
+            element.removeEventListener('touchend', scheduleFit);
             if (frameId !== null) cancelAnimationFrame(frameId);
         });
 
@@ -630,10 +630,10 @@ export function createNodeDomBindingsApi({
             e.stopPropagation();
             e.preventDefault();
             if (blockRunningNodeMutation(id, e, '节点正在运行，暂不能调整大小')) return;
-            const header = el.querySelector('.node-header');
-            const headerMinWidth = header ? Math.ceil(header.getBoundingClientRect().width) : 180;
             const node = state.nodes.get(id);
-            const defaultMinimum = getConfiguredDefaultSize(node, el, headerMinWidth);
+            const defaultMinimum = typeof getNodeMinimumSizeFromLifecycle === 'function'
+                ? getNodeMinimumSizeFromLifecycle(node)
+                : getConfiguredDefaultSize(node, el, 180);
 
             state.resizing = {
                 nodeId: id,
@@ -729,24 +729,24 @@ export function createNodeDomBindingsApi({
             modelSelect?.addEventListener('change', () => {
                 syncImageGenerateResolutionOptions(id);
                 persistNodeModelSelection(id, type);
-                fitNodeToContent(id, { allowShrink: true });
+                fitNodeToContent(id);
             });
             const providerSelect = el.querySelector(`#${id}-provider`);
             providerSelect?.addEventListener('change', () => {
                 syncImageGenerateResolutionOptions(id);
                 persistNodeModelSelection(id, type);
-                fitNodeToContent(id, { allowShrink: true });
+                fitNodeToContent(id);
             });
             const resolutionSelect = el.querySelector(`#${id}-resolution`);
             resolutionSelect?.addEventListener('change', () => {
                 updateImageGenerateCustomResolutionVisibility(id);
-                fitNodeToContent(id, { allowShrink: true });
+                fitNodeToContent(id);
             });
             const customWidthInput = el.querySelector(`#${id}-custom-resolution-width`);
             const customHeightInput = el.querySelector(`#${id}-custom-resolution-height`);
             const syncCustomResolutionValidation = () => {
                 updateImageGenerateCustomResolutionValidation(id);
-                fitNodeToContent(id, { allowShrink: true });
+                fitNodeToContent(id);
             };
             customWidthInput?.addEventListener('input', syncCustomResolutionValidation);
             customHeightInput?.addEventListener('input', syncCustomResolutionValidation);
@@ -772,6 +772,7 @@ export function createNodeDomBindingsApi({
                 });
             });
             syncImageGenerateCount(id);
+            fitNodeToContent(id);
         }
         else if (type === 'ImageResize') setupImageResize(id, el);
         else if (type === 'ImageSave') setupImageSave(id, el);
@@ -783,7 +784,7 @@ export function createNodeDomBindingsApi({
             modelSelect?.addEventListener('change', () => {
                 syncNodeProviderOptions(id, type);
                 persistNodeModelSelection(id, type);
-                fitNodeToContent(id, { allowShrink: true });
+                fitNodeToContent(id);
             });
             const providerSelect = el.querySelector(`#${id}-provider`);
             providerSelect?.addEventListener('change', () => {
@@ -815,11 +816,8 @@ export function createNodeDomBindingsApi({
             }
 
             const isExpandable = input.closest('.node-field-expand');
-            if (input.tagName === 'TEXTAREA' && !isExpandable) {
-                input.addEventListener('input', () => adjustTextareaHeight(input));
-                setTimeout(() => adjustTextareaHeight(input), 0);
-            } else if (input.tagName === 'TEXTAREA' && isExpandable && type !== 'Text') {
-                bindExpandableTextareaResize(id, input);
+            if (input.tagName === 'TEXTAREA' && isExpandable) {
+                bindExpandableElementResize(id, input);
             }
         });
     }

@@ -28,6 +28,9 @@ export function createNodeLifecycleApi({
     const view = documentRef.defaultView || window;
     let pendingNodeSizeConnectionRefresh = null;
     const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container';
+    const NODE_SCROLL_CONTENT_SELECTOR = '.chat-response-area, .text-display-box';
+    const FALLBACK_DEFAULT_NODE_WIDTH = 180;
+    const FALLBACK_DEFAULT_NODE_HEIGHT = 120;
 
     function scheduleNodeSizeConnectionRefresh() {
         if (pendingNodeSizeConnectionRefresh !== null) return;
@@ -114,12 +117,12 @@ export function createNodeLifecycleApi({
 
     function getDefaultNodeWidth(config) {
         const width = Number(config?.defaultWidth);
-        return Number.isFinite(width) && width > 0 ? width : 180;
+        return Number.isFinite(width) && width > 0 ? width : FALLBACK_DEFAULT_NODE_WIDTH;
     }
 
     function getDefaultNodeHeight(config) {
         const height = Number(config?.defaultHeight);
-        return Number.isFinite(height) && height > 0 ? height : 120;
+        return Number.isFinite(height) && height > 0 ? height : FALLBACK_DEFAULT_NODE_HEIGHT;
     }
 
     function clampNodeWidthToDefault(width, config) {
@@ -142,219 +145,284 @@ export function createNodeLifecycleApi({
         return getPx(style, 'margin-top') + getPx(style, 'margin-bottom');
     }
 
+    function getBoxExtras(style, axis) {
+        if (axis === 'x') {
+            return getPx(style, 'padding-left') + getPx(style, 'padding-right') +
+                getPx(style, 'border-left-width') + getPx(style, 'border-right-width');
+        }
+        return getPx(style, 'padding-top') + getPx(style, 'padding-bottom') +
+            getPx(style, 'border-top-width') + getPx(style, 'border-bottom-width');
+    }
+
+    function getLayoutGap(style, axis) {
+        if (axis === 'x') {
+            return getPx(style, 'column-gap') || getPx(style, 'gap') || 0;
+        }
+        return getPx(style, 'row-gap') || getPx(style, 'gap') || 0;
+    }
+
+    function isVisibleElement(el) {
+        if (!el) return false;
+        const style = getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'collapse' && el.offsetParent !== null;
+    }
+
     function isResizableMediaElement(el) {
         return Boolean(el?.matches?.(NODE_RESIZABLE_MEDIA_SELECTOR));
     }
 
-    function getOuterHeight(el) {
-        if (!el || el.offsetParent === null) return 0;
-        const style = getComputedStyle(el);
-        if (style.position === 'absolute') return 0;
-        return Math.ceil(el.offsetHeight + getPx(style, 'margin-top') + getPx(style, 'margin-bottom'));
-    }
-
-    function getOuterWidth(el) {
-        if (!el || el.offsetParent === null) return 0;
-        const style = getComputedStyle(el);
-        if (style.position === 'absolute') return 0;
-        return Math.ceil(el.offsetWidth + getPx(style, 'margin-left') + getPx(style, 'margin-right'));
-    }
-
-    function getNonTextareaRequiredChildHeight(child) {
-        if (!child || child.offsetParent === null) return 0;
-        const style = getComputedStyle(child);
-        const marginY = getOuterExtras(style, 'y');
-        if (isResizableMediaElement(child)) {
-            return Math.ceil(getPx(style, 'min-height') + marginY);
+    function measureTextWidth(text, font) {
+        if (!measureTextWidth.canvas) {
+            measureTextWidth.canvas = documentRef.createElement('canvas');
         }
-        if (child.querySelector?.('textarea')) return getOuterHeight(child);
-
-        return Math.ceil(Math.max(child.offsetHeight || 0, child.scrollHeight || 0) + marginY);
+        const context = measureTextWidth.canvas.getContext('2d');
+        if (!context) return String(text || '').length * 8;
+        context.font = font;
+        return context.measureText(String(text || '')).width;
     }
 
-    function getNonTextareaRequiredChildWidth(child) {
-        if (!child || child.offsetParent === null) return 0;
-        const style = getComputedStyle(child);
-        const marginX = getOuterExtras(style, 'x');
+    function getControlContentWidth(control) {
+        const style = getComputedStyle(control);
+        const font = style.font || `${style.fontSize} ${style.fontFamily}`;
+        const horizontalPadding = getPx(style, 'padding-left') + getPx(style, 'padding-right');
+        const horizontalBorder = getPx(style, 'border-left-width') + getPx(style, 'border-right-width');
         const minWidth = getPx(style, 'min-width');
-        if (isResizableMediaElement(child)) {
-            return Math.ceil(minWidth + marginX);
+
+        if (control.tagName === 'SELECT') {
+            const selectedOption = control.selectedOptions?.[0];
+            const optionWidth = Array.from(control.options || []).reduce((max, option) => {
+                return Math.max(max, measureTextWidth(option.textContent || option.value || '', font));
+            }, measureTextWidth(selectedOption?.textContent || control.value || '', font));
+            return Math.ceil(Math.max(minWidth, optionWidth + horizontalPadding + horizontalBorder + 18));
         }
-        return Math.ceil(Math.max(child.offsetWidth || 0, child.scrollWidth || 0, minWidth) + marginX);
+
+        if (control.tagName === 'BUTTON') {
+            const text = String(control.textContent || '').replace(/\s+/g, ' ').trim();
+            const children = Array.from(control.children).filter(isVisibleElement);
+            const childrenWidth = children.reduce((total, child) => total + (child.offsetWidth || 0), 0);
+            const gap = getLayoutGap(style, 'x') * Math.max(0, children.length + (text ? 1 : 0) - 1);
+            return Math.ceil(Math.max(minWidth, measureTextWidth(text, font) + childrenWidth + gap + horizontalPadding + horizontalBorder));
+        }
+
+        if (control.tagName === 'TEXTAREA') {
+            return Math.ceil(Math.max(minWidth, horizontalPadding + horizontalBorder + 32));
+        }
+
+        const text = control.value || control.placeholder || '';
+        return Math.ceil(Math.max(minWidth, measureTextWidth(text, font) + horizontalPadding + horizontalBorder));
     }
 
-    function getNonTextareaRequiredNodeSize(el, body) {
-        const originalHeight = el.style.height;
-        const originalBodyMaxHeight = body.style.maxHeight;
-        const originalBodyOverflowY = body.style.overflowY;
+    function getElementMinimumSize(el) {
+        if (!isVisibleElement(el)) {
+            return { width: 0, height: 0 };
+        }
+
+        const style = getComputedStyle(el);
+        const marginX = getOuterExtras(style, 'x');
+        const marginY = getOuterExtras(style, 'y');
+        const minWidth = getPx(style, 'min-width');
+        const minHeight = getPx(style, 'min-height');
+
+        if (isResizableMediaElement(el)) {
+            return {
+                width: Math.ceil(minWidth + marginX),
+                height: Math.ceil(minHeight + marginY)
+            };
+        }
+
+        if (el.matches?.(NODE_SCROLL_CONTENT_SELECTOR)) {
+            const explicitHeightValue = String(el.style?.height || '');
+            const explicitHeight = /px$/i.test(explicitHeightValue) ? parseFloat(explicitHeightValue) : NaN;
+            const contentHeight = Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : minHeight;
+            return {
+                width: Math.ceil(minWidth + getBoxExtras(style, 'x') + marginX),
+                height: Math.ceil(Math.max(minHeight, contentHeight) + marginY)
+            };
+        }
+
+        if (el.matches?.('input, select, textarea, button')) {
+            const explicitHeightValue = String(el.style?.height || '');
+            const explicitHeight = /px$/i.test(explicitHeightValue) ? parseFloat(explicitHeightValue) : NaN;
+            const controlHeight = el.tagName === 'TEXTAREA'
+                ? (Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : minHeight)
+                : el.offsetHeight || 0;
+            return {
+                width: Math.ceil(Math.max(minWidth, getControlContentWidth(el)) + marginX),
+                height: Math.ceil(Math.max(minHeight, controlHeight) + marginY)
+            };
+        }
+
+        const children = Array.from(el.children).filter(isVisibleElement);
+        if (!children.length) {
+            const text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+            const isInlineText = ['LABEL', 'SPAN'].includes(el.tagName) || style.display === 'inline' || style.display === 'inline-flex';
+            const textWidth = text && isInlineText
+                ? measureTextWidth(text, style.font || `${style.fontSize} ${style.fontFamily}`) + getBoxExtras(style, 'x')
+                : 0;
+            return {
+                width: Math.ceil(Math.max(minWidth, textWidth) + marginX),
+                height: Math.ceil(Math.max(minHeight, el.offsetHeight || 0) + marginY)
+            };
+        }
+
+        const display = style.display || '';
+        const flexDirection = style.flexDirection || 'row';
+        const isRowLayout = (display.includes('flex') && !flexDirection.startsWith('column')) ||
+            display.includes('grid') ||
+            el.classList.contains('save-btn-group') ||
+            el.classList.contains('image-resize-mode-group') ||
+            el.classList.contains('generation-count-control');
+        const childSizes = children.map((child) => getElementMinimumSize(child));
+        const gapX = getLayoutGap(style, 'x');
+        const gapY = getLayoutGap(style, 'y');
+        const contentWidth = isRowLayout
+            ? childSizes.reduce((total, size) => total + size.width, 0) + Math.max(0, childSizes.length - 1) * gapX
+            : Math.max(0, ...childSizes.map((size) => size.width));
+        const contentHeight = isRowLayout
+            ? Math.max(0, ...childSizes.map((size) => size.height))
+            : childSizes.reduce((total, size) => total + size.height, 0) + Math.max(0, childSizes.length - 1) * gapY;
+
+        return {
+            width: Math.ceil(Math.max(minWidth, contentWidth + getBoxExtras(style, 'x')) + marginX),
+            height: Math.ceil(Math.max(minHeight, contentHeight + getBoxExtras(style, 'y')) + marginY)
+        };
+    }
+
+    function getHeaderMinimumWidth(header, fallbackWidth) {
+        if (!header) return fallbackWidth;
+        const style = getComputedStyle(header);
+        const paddingX = getPx(style, 'padding-left') + getPx(style, 'padding-right');
+        const leftSize = getElementMinimumSize(header.querySelector('.header-left'));
+        const rightSize = getElementMinimumSize(header.querySelector('.header-right'));
+        const gap = getPx(style, 'column-gap') || getPx(style, 'gap') || 12;
+        return Math.ceil(Math.max(fallbackWidth, paddingX + leftSize.width + rightSize.width + gap));
+    }
+
+    function getMeasuredNodeMinimumSize(el, config = null) {
+        if (!el) {
+            return {
+                minWidth: getDefaultNodeWidth(config),
+                minHeight: getDefaultNodeHeight(config)
+            };
+        }
+
+        const header = el.querySelector('.node-header');
+        const body = el.querySelector('.node-body');
+        const originalElHeight = el.style.height;
+        const originalBodyFlex = body?.style.flex || '';
+        const originalBodyMinHeight = body?.style.minHeight || '';
+        const originalBodyOverflowY = body?.style.overflowY || '';
+        const originalBodyMaxHeight = body?.style.maxHeight || '';
 
         el.style.height = 'auto';
-        body.style.maxHeight = 'none';
-        body.style.overflowY = 'visible';
+        if (body) {
+            body.style.flex = '0 0 auto';
+            body.style.minHeight = 'auto';
+            body.style.overflowY = 'visible';
+            body.style.maxHeight = 'none';
+        }
 
-        const bodyStyle = getComputedStyle(body);
-        const bodyPaddingX = getPx(bodyStyle, 'padding-left') + getPx(bodyStyle, 'padding-right');
-        const bodyPaddingY = getPx(bodyStyle, 'padding-top') + getPx(bodyStyle, 'padding-bottom');
-        const bodyGap = getPx(bodyStyle, 'row-gap') || getPx(bodyStyle, 'gap');
-        let bodyHeight = bodyPaddingY;
-        let bodyWidth = 0;
-        let visibleBodyChildren = 0;
+        const headerWidth = getHeaderMinimumWidth(header, getDefaultNodeWidth(config));
+        const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+        const bodySize = body ? getElementMinimumSize(body) : { width: 0, height: 0 };
 
-        Array.from(body.children).forEach((child) => {
-            if (child.offsetParent === null) return;
-            visibleBodyChildren += 1;
-            bodyHeight += getNonTextareaRequiredChildHeight(child);
-            bodyWidth = Math.max(bodyWidth, getNonTextareaRequiredChildWidth(child));
-        });
+        el.style.height = originalElHeight;
+        if (body) {
+            body.style.flex = originalBodyFlex;
+            body.style.minHeight = originalBodyMinHeight;
+            body.style.overflowY = originalBodyOverflowY;
+            body.style.maxHeight = originalBodyMaxHeight;
+        }
 
-        bodyHeight += Math.max(0, visibleBodyChildren - 1) * bodyGap;
-
-        let chromeHeight = 0;
-        let chromeWidth = 0;
-        Array.from(el.children).forEach((child) => {
-            if (child === body) return;
-            chromeHeight += getOuterHeight(child);
-            chromeWidth = Math.max(chromeWidth, getOuterWidth(child));
-        });
-
-        const requiredSize = {
-            width: Math.ceil(Math.max(chromeWidth, bodyWidth + bodyPaddingX)),
-            height: Math.ceil(chromeHeight + bodyHeight)
+        return {
+            minWidth: Math.max(getDefaultNodeWidth(config), headerWidth, bodySize.width),
+            minHeight: Math.max(getDefaultNodeHeight(config), Math.ceil(headerHeight + bodySize.height))
         };
-
-        el.style.height = originalHeight;
-        body.style.maxHeight = originalBodyMaxHeight;
-        body.style.overflowY = originalBodyOverflowY;
-        return requiredSize;
     }
 
-    function getTextNodeRequiredHeight(el, body) {
-        const textarea = body.querySelector('.node-field-expand textarea');
-        if (!textarea) return null;
+    function getNodeMinimumSize(nodeOrId) {
+        const node = typeof nodeOrId === 'string' ? state.nodes.get(nodeOrId) : nodeOrId;
+        if (!node) {
+            return {
+                minWidth: FALLBACK_DEFAULT_NODE_WIDTH,
+                minHeight: FALLBACK_DEFAULT_NODE_HEIGHT
+            };
+        }
+        const config = nodeConfigs[node.type] || null;
+        const measured = getMeasuredNodeMinimumSize(node.el, config);
+        return {
+            minWidth: Math.max(getDefaultNodeWidth(config), Number(node.minWidth) || 0, measured.minWidth),
+            minHeight: Math.max(getDefaultNodeHeight(config), Number(node.minHeight) || 0, measured.minHeight)
+        };
+    }
 
-        const bodyStyle = getComputedStyle(body);
-        const bodyPaddingY = getPx(bodyStyle, 'padding-top') + getPx(bodyStyle, 'padding-bottom');
-        const bodyGap = getPx(bodyStyle, 'row-gap') || getPx(bodyStyle, 'gap');
-        const textareaStyle = getComputedStyle(textarea);
-        const textareaMinHeight = getPx(textareaStyle, 'min-height');
-        const previousTextareaHeight = textarea.style.height;
-        const previousTextareaFlex = textarea.style.flex;
-        textarea.style.height = 'auto';
-        textarea.style.flex = '0 0 auto';
-        const textareaHeight = Math.max(textareaMinHeight, textarea.scrollHeight);
-        textarea.style.height = previousTextareaHeight;
-        textarea.style.flex = previousTextareaFlex;
-        let bodyHeight = bodyPaddingY;
-        let visibleBodyChildren = 0;
+    function applyNodeSize(node, width, height, options = {}) {
+        if (!node?.el) return false;
+        const currentWidth = node.el.offsetWidth || Number(node.width) || 0;
+        const currentHeight = node.el.offsetHeight || Number(node.height) || 0;
+        const nextWidth = Math.round(width);
+        const nextHeight = Math.round(height);
+        const widthChanged = Number.isFinite(nextWidth) && nextWidth > 0 && Math.abs(nextWidth - currentWidth) > 1;
+        const heightChanged = Number.isFinite(nextHeight) && nextHeight > 0 && Math.abs(nextHeight - currentHeight) > 1;
+        if (!widthChanged && !heightChanged) return false;
 
-        Array.from(body.children).forEach((child) => {
-            if (child.offsetParent === null) return;
-            visibleBodyChildren += 1;
+        if (widthChanged) {
+            node.el.style.width = `${nextWidth}px`;
+            node.width = nextWidth;
+            node.observedWidth = nextWidth;
+        }
+        if (heightChanged) {
+            node.el.style.height = `${nextHeight}px`;
+            node.height = nextHeight;
+            node.observedHeight = nextHeight;
+        }
 
-            if (child.classList.contains('node-field') && child.contains(textarea)) {
-                const childStyle = getComputedStyle(child);
-                const label = child.querySelector(':scope > label');
-                const fieldGap = getPx(childStyle, 'row-gap') || getPx(childStyle, 'gap');
-                bodyHeight += (label?.offsetHeight || 0) + (label ? fieldGap : 0) + textareaHeight;
-                return;
-            }
-
-            bodyHeight += child.scrollHeight || child.offsetHeight || 0;
-        });
-
-        bodyHeight += Math.max(0, visibleBodyChildren - 1) * bodyGap;
-
-        const chromeHeight = Array.from(el.children).reduce((total, child) => {
-            return child === body ? total : total + getOuterHeight(child);
-        }, 0);
-
-        return Math.ceil(chromeHeight + bodyHeight);
+        if (options.updateConnections !== false) updateAllConnections();
+        if (options.save !== false) scheduleSave();
+        return true;
     }
 
     function fitNodeToContent(nodeId, options = {}) {
         const node = state.nodes.get(nodeId);
         if (!node || !node.el) return;
-        const { allowShrink = false } = options;
-        if (allowShrink && node.userResized) return;
-
-        const el = node.el;
-        const body = el.querySelector('.node-body');
-        if (!body) return;
-
-        const originalHeight = el.style.height;
-        const originalBodyMaxHeight = body.style.maxHeight;
-
-        el.style.height = 'auto';
-        body.style.maxHeight = 'none';
-
-        const textNodeRequiredHeight = node.type === 'Text' ? getTextNodeRequiredHeight(el, body) : null;
-        const nonTextRequiredSize = Number.isFinite(textNodeRequiredHeight) && textNodeRequiredHeight > 0
-            ? null
-            : getNonTextareaRequiredNodeSize(el, body);
-        const rawRequiredHeight = Number.isFinite(textNodeRequiredHeight) && textNodeRequiredHeight > 0
-            ? textNodeRequiredHeight
-            : nonTextRequiredSize.height;
-        const defaultHeight = Number(node.defaultHeight) > 0 ? Number(node.defaultHeight) : 120;
-        const requiredHeight = node.maxHeight
-            ? Math.min(rawRequiredHeight, node.maxHeight)
-            : rawRequiredHeight;
-        const normalizedRequiredHeight = Math.max(defaultHeight, requiredHeight);
-        const currentPx = parseFloat(originalHeight) || el.offsetHeight;
-        const heightChanged = allowShrink
-            ? Math.abs(normalizedRequiredHeight - currentPx) > 2
-            : normalizedRequiredHeight > currentPx + 2;
-
-        if (heightChanged) {
-            el.style.height = normalizedRequiredHeight + 'px';
-            node.height = normalizedRequiredHeight;
-            node.observedWidth = el.offsetWidth || Number(node.width) || 0;
-            node.observedHeight = normalizedRequiredHeight;
-            updateAllConnections();
-            scheduleSave();
-        } else {
-            el.style.height = originalHeight;
-        }
-        body.style.maxHeight = originalBodyMaxHeight;
+        const { allowShrink = false, reason = '' } = options;
+        const minimum = getNodeMinimumSize(node);
+        const currentWidth = node.el.offsetWidth || Number(node.width) || minimum.minWidth;
+        const currentHeight = node.el.offsetHeight || Number(node.height) || minimum.minHeight;
+        const shouldShrink = allowShrink && reason === 'element-resize';
+        const nextWidth = shouldShrink ? minimum.minWidth : Math.max(currentWidth, minimum.minWidth);
+        const nextHeight = shouldShrink ? minimum.minHeight : Math.max(currentHeight, minimum.minHeight);
+        applyNodeSize(node, nextWidth, nextHeight, options);
     }
 
     function ensureNodeContentVisible(nodeId, options = {}) {
         const node = state.nodes.get(nodeId);
         if (!node || !node.el) return;
-        if (node.userResized) return;
-
-        const el = node.el;
-        const body = el.querySelector('.node-body');
-        if (!body) return;
-
-        const requiredSize = getNonTextareaRequiredNodeSize(el, body);
-        const currentWidth = el.offsetWidth || Number(node.width) || 0;
-        const currentHeight = el.offsetHeight || Number(node.height) || 0;
-        const nextWidth = Math.max(currentWidth, requiredSize.width);
-        const nextHeight = Math.max(currentHeight, requiredSize.height);
-        const widthChanged = nextWidth > currentWidth + 2;
-        const heightChanged = nextHeight > currentHeight + 2;
-
-        if (!widthChanged && !heightChanged) return;
-
-        if (widthChanged) {
-            el.style.width = nextWidth + 'px';
-            node.width = nextWidth;
-            node.observedWidth = nextWidth;
-        }
-        if (heightChanged) {
-            el.style.height = nextHeight + 'px';
-            node.height = nextHeight;
-            node.observedHeight = nextHeight;
-        }
-
-        updateAllConnections();
-        if (options.save !== false) scheduleSave();
+        const minimum = getNodeMinimumSize(node);
+        const currentWidth = node.el.offsetWidth || Number(node.width) || minimum.minWidth;
+        const currentHeight = node.el.offsetHeight || Number(node.height) || minimum.minHeight;
+        applyNodeSize(
+            node,
+            Math.max(currentWidth, minimum.minWidth),
+            Math.max(currentHeight, minimum.minHeight),
+            options
+        );
     }
 
     function scheduleEnsureNodeContentVisible(nodeId, options = {}) {
         const requestFrame = view.requestAnimationFrame || ((callback) => view.setTimeout(callback, 16));
         requestFrame(() => {
             ensureNodeContentVisible(nodeId, options);
+        });
+    }
+
+    function scheduleNodeContentVisibleChecks(nodeId, options = {}) {
+        scheduleEnsureNodeContentVisible(nodeId, options);
+        const delays = Array.isArray(options.delays) ? options.delays : [50, 150];
+        delays.forEach((delay) => {
+            view.setTimeout(() => {
+                ensureNodeContentVisible(nodeId, options);
+            }, delay);
         });
     }
 
@@ -482,7 +550,7 @@ export function createNodeLifecycleApi({
                     const urlInput = el.querySelector(`#${id}-url-input`);
                     if (urlInput) urlInput.value = nodeData.imageUrl;
                     onConnectionsChanged();
-                    scheduleEnsureNodeContentVisible(id);
+                    scheduleNodeContentVisibleChecks(id);
                     return;
                 }
 
@@ -540,13 +608,13 @@ export function createNodeLifecycleApi({
                         showResolutionBadge(id, data);
                         onConnectionsChanged();
                     }
-                    scheduleEnsureNodeContentVisible(id);
+                    scheduleNodeContentVisibleChecks(id);
                 }
             })();
         }
 
         bindNodeInteractions({ id, type: normalizedType, el });
-        scheduleEnsureNodeContentVisible(id);
+        scheduleNodeContentVisibleChecks(id);
 
         if (!restoreData && !silent) showToast(`已添加「${config.title}」节点`, 'success');
         if (!restoreData) scheduleSave();
@@ -774,6 +842,7 @@ export function createNodeLifecycleApi({
 
     return {
         fitNodeToContent,
+        getNodeMinimumSize,
         addNode,
         removeNode,
         detachNodesFromConnections,

@@ -1264,7 +1264,7 @@ export function createSettingsControllerApi({
                 if (warning) {
                     warning.style.display = hasDir ? 'none' : 'block';
                     windowRef.requestAnimationFrame(() => {
-                        fitNodeToContent(id, { allowShrink: true });
+                        fitNodeToContent(id);
                     });
                 }
             }

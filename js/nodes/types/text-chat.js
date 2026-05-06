@@ -16,9 +16,9 @@ export const textChatNode = {
     ],
     outputs: [{ name: 'text', type: 'text', label: '回复文本' }],
     defaultWidth: 380,
-    defaultHeight: 1000,
-    restoreHeightCap: 1400,
-    restoreHeightFallback: 920
+    defaultHeight: 760,
+    restoreHeightCap: 1200,
+    restoreHeightFallback: 760
 };
 /**
  * 定义智能对话节点的元数据、端口和默认尺寸。

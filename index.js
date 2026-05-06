@@ -96,10 +96,6 @@ function getProxyHeaders(url, method = 'POST', extraHeaders = {}) {
 
 function adjustTextareaHeight(textarea) {
     if (!textarea) return;
-    textarea.style.height = 'auto';
-    const height = textarea.scrollHeight;
-    textarea.style.height = (height + 2) + 'px';
-
     // 如果 textarea 位于节点内部，节点高度可能已经变化，
     // 需要同步刷新连线位置。
     if (typeof updateAllConnections === 'function') {
@@ -366,8 +362,8 @@ const nodeDomBindingsApi = createNodeDomBindingsApi({
     showToast,
     scheduleSave,
     debounce,
-    adjustTextareaHeight,
-    fitNodeToContent
+    fitNodeToContent,
+    getNodeMinimumSizeFromLifecycle: (nodeOrId) => getNodeLifecycleApi().getNodeMinimumSize(nodeOrId)
 });
 const {
     getPortPosition,
