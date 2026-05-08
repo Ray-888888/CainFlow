@@ -13,10 +13,12 @@ import {
     resolveProviderUrl,
     validateOpenAiImageSize
 } from './provider-request-utils.js';
+import { splitTextForTextSplitNode } from '../../core/common-utils.js';
 
 export function createExecutionCoreApi({
     state,
     nodeConfigs,
+    syncTextSplitNodeData = () => {},
     documentRef = document,
     windowRef = window,
     fetchRef = fetch,
@@ -431,6 +433,16 @@ export function createExecutionCoreApi({
                 if (!text || text === '等待输入文本...' || text === '当前无输入文本') return undefined;
                 return text;
             }
+        }
+
+        if (/^part_\d+$/.test(portName) && node.type === 'TextSplit') {
+            if (node.data && node.data[portName] !== undefined) return node.data[portName];
+            const text = node.data?.text || '';
+            const delimiter = documentRef.getElementById(`${node.id}-delimiter`)?.value || '';
+            const removeEmptyLines = documentRef.getElementById(`${node.id}-remove-empty-lines`)?.checked === true;
+            const parts = splitTextForTextSplitNode(text, delimiter, { removeEmptyLines });
+            const index = Math.max(0, parseInt(portName.replace('part_', ''), 10) - 1);
+            return parts[index];
         }
 
         if (portName === 'image') {
@@ -928,6 +940,27 @@ export function createExecutionCoreApi({
             const text = hasIncomingText ? (inputs.text ?? '') : (textarea?.value || node.data.text || '');
             if (textarea && textarea.value !== text) textarea.value = text;
             node.data.text = text;
+            updateAllConnections();
+        },
+        TextSplit: async (node, inputs = {}) => {
+            const delimiterInput = documentRef.getElementById(`${node.id}-delimiter`);
+            const removeEmptyLinesInput = documentRef.getElementById(`${node.id}-remove-empty-lines`);
+            const hasIncomingText = Object.prototype.hasOwnProperty.call(inputs, 'text');
+            const text = hasIncomingText ? (inputs.text ?? '') : (node.data.text || '');
+            const delimiter = delimiterInput?.value ?? node.data.delimiter ?? '';
+            const removeEmptyLines = removeEmptyLinesInput?.checked === true;
+            const parts = splitTextForTextSplitNode(text, delimiter, { removeEmptyLines });
+            node.data.text = text;
+            node.data.delimiter = delimiter;
+            node.data.removeEmptyLines = removeEmptyLines;
+            node.data.parts = parts;
+            Object.keys(node.data).forEach((key) => {
+                if (/^part_\d+$/.test(key)) delete node.data[key];
+            });
+            parts.forEach((part, index) => {
+                node.data[`part_${index + 1}`] = part;
+            });
+            syncTextSplitNodeData(node.id);
             updateAllConnections();
         },
         TextDisplay: async (node, inputs) => {

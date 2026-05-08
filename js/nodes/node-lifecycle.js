@@ -223,6 +223,13 @@ export function createNodeLifecycleApi({
         const minWidth = getPx(style, 'min-width');
         const minHeight = getPx(style, 'min-height');
 
+        if (el.classList.contains('text-split-preview')) {
+            return {
+                width: Math.ceil(minWidth + marginX),
+                height: Math.ceil(minHeight + marginY)
+            };
+        }
+
         if (isResizableMediaElement(el)) {
             return {
                 width: Math.ceil(minWidth + marginX),
@@ -233,7 +240,9 @@ export function createNodeLifecycleApi({
         if (el.matches?.(NODE_SCROLL_CONTENT_SELECTOR)) {
             const explicitHeightValue = String(el.style?.height || '');
             const explicitHeight = /px$/i.test(explicitHeightValue) ? parseFloat(explicitHeightValue) : NaN;
-            const contentHeight = Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : minHeight;
+            const contentHeight = el.classList.contains('chat-response-area')
+                ? minHeight
+                : (Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : minHeight);
             return {
                 width: Math.ceil(minWidth + getBoxExtras(style, 'x') + marginX),
                 height: Math.ceil(Math.max(minHeight, contentHeight) + marginY)
@@ -449,7 +458,10 @@ export function createNodeLifecycleApi({
         if (!silent) pushHistory();
         const normalizedType = normalizeNodeType(type);
         const config = nodeConfigs[normalizedType];
-        if (!config) return;
+        if (!config) {
+            if (!silent) showToast(`未注册的节点类型：${normalizedType}`, 'error', 5000);
+            return null;
+        }
         const effectiveRestoreData = restoreData || getNodeDefaultRestoreData(normalizedType);
         const id = effectiveRestoreData?.id ? effectiveRestoreData.id : generateId();
         const el = documentRef.createElement('div');
@@ -468,7 +480,12 @@ export function createNodeLifecycleApi({
         const initialHeight = Math.max(clampedInitialHeight || 0, getDefaultNodeHeight(config));
         if (initialHeight) el.style.height = initialHeight + 'px';
 
-        el.innerHTML = createNodeMarkup({ type: normalizedType, id, config, restoreData: effectiveRestoreData, state });
+        try {
+            el.innerHTML = createNodeMarkup({ type: normalizedType, id, config, restoreData: effectiveRestoreData, state });
+        } catch (error) {
+            if (!silent) showToast(`创建节点失败：${error.message || error}`, 'error', 5000);
+            return null;
+        }
         nodesLayer.appendChild(el);
 
         if (effectiveRestoreData && effectiveRestoreData.height) {
@@ -523,6 +540,16 @@ export function createNodeLifecycleApi({
         }
         if (effectiveRestoreData?.lastText) {
             nodeData.data.text = effectiveRestoreData.lastText;
+        }
+        if (normalizedType === 'TextSplit') {
+            nodeData.data.text = effectiveRestoreData?.text || effectiveRestoreData?.lastText || '';
+            nodeData.data.delimiter = effectiveRestoreData?.delimiter || '';
+            nodeData.data.removeEmptyLines = effectiveRestoreData?.removeEmptyLines === true;
+            nodeData.data.previewEnabled = effectiveRestoreData?.previewEnabled === true;
+            nodeData.data.parts = Array.isArray(effectiveRestoreData?.parts) ? effectiveRestoreData.parts.slice() : [];
+            nodeData.data.parts.forEach((part, index) => {
+                nodeData.data[`part_${index + 1}`] = part;
+            });
         }
         if (nodeData.isSucceeded) el.classList.add('completed');
         if (!nodeData.enabled) el.classList.add('disabled');
@@ -613,7 +640,14 @@ export function createNodeLifecycleApi({
             })();
         }
 
-        bindNodeInteractions({ id, type: normalizedType, el });
+        try {
+            bindNodeInteractions({ id, type: normalizedType, el });
+        } catch (error) {
+            el.remove();
+            state.nodes.delete(id);
+            if (!silent) showToast(`初始化节点失败：${error.message || error}`, 'error', 5000);
+            return null;
+        }
         scheduleNodeContentVisibleChecks(id);
 
         if (!restoreData && !silent) showToast(`已添加「${config.title}」节点`, 'success');

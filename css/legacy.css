@@ -1977,6 +1977,8 @@ body {
 .context-menu {
     position: fixed;
     min-width: 200px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     background: var(--bg-context-menu);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -3193,6 +3195,8 @@ input[type=number] {
     position: relative;
     width: 100%;
     min-height: 120px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .chat-response-area {
@@ -3201,7 +3205,7 @@ input[type=number] {
     border-radius: var(--radius-sm);
     padding: 10px;
     padding-top: 30px;
-    /* Space for the floating copy button */
+    /* Space for the small copy button inside the reply box. */
     overflow-y: auto;
     /* Scrollable when content overflows */
     font-size: 13px;
@@ -3215,14 +3219,16 @@ input[type=number] {
     height: 160px;
     resize: vertical;
     overscroll-behavior: contain;
+    min-width: 0;
 }
 
 .chat-copy-btn {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 26px;
-    height: 26px;
+    top: 5px;
+    left: 5px;
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-xs);
@@ -3270,10 +3276,10 @@ input[type=number] {
 
 .node-chat .chat-response-area {
     flex: 1 1 auto;
-    min-height: 96px;
+    min-height: 0;
     height: 100%;
     max-height: 100%;
-    resize: vertical;
+    resize: none;
 }
 
 .node-text-out .node-field:last-child {
@@ -3313,6 +3319,70 @@ input[type=number] {
     min-height: 120px;
     height: 100%;
     resize: vertical;
+}
+
+.node-text-split .text-split-delimiter {
+    min-height: 44px;
+    resize: vertical;
+}
+
+.node-text-split .text-split-summary {
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.4;
+    user-select: none;
+}
+
+.node-text-split .node-body {
+    overflow: hidden;
+}
+
+.node-text-split .text-split-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.node-text-split .text-split-preview-item {
+    flex: 0 0 auto;
+    border: 1px solid var(--border-input);
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+}
+
+.node-text-split .text-split-preview-label {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    user-select: none;
+}
+
+.node-text-split .text-split-preview-text {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.node-text-split .text-split-preview-empty {
+    flex: 0 0 auto;
+    border: 1px dashed var(--border-input);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
 }
 
 .text-display-box {

@@ -11,6 +11,18 @@ export function createClipboardControllerApi({
     scheduleSave,
     onConnectionsChanged = () => {}
 }) {
+    function getNodeTextareaHeights(id) {
+        const heights = {};
+        documentRef.querySelectorAll(`#${id} textarea[id^="${id}-"]`).forEach((textarea) => {
+            const key = textarea.id.slice(`${id}-`.length);
+            const height = textarea.offsetHeight || parseFloat(textarea.style.height || '0');
+            if (key && Number.isFinite(height) && height > 0) {
+                heights[key] = Math.round(height);
+            }
+        });
+        return Object.keys(heights).length > 0 ? heights : null;
+    }
+
     function serializeOneNode(nodeId) {
         const node = state.nodes.get(nodeId);
         if (!node) return null;
@@ -23,6 +35,8 @@ export function createClipboardControllerApi({
             width: node.width || null,
             height: node.height || null
         };
+        const textareaHeights = getNodeTextareaHeights(id);
+        if (textareaHeights) serialized.textareaHeights = textareaHeights;
         if (node.type === 'ImageImport' || node.type === 'ImagePreview' || node.type === 'ImageSave' || node.type === 'ImageResize' || node.type === 'ImageCompare') {
             serialized.imageData = node.data.image || node.imageData || null;
         }
@@ -72,6 +86,13 @@ export function createClipboardControllerApi({
         }
         if (node.type === 'Text') {
             serialized.text = documentRef.getElementById(`${id}-text`)?.value || '';
+        }
+        if (node.type === 'TextSplit') {
+            serialized.text = node.data?.text || '';
+            serialized.delimiter = documentRef.getElementById(`${id}-delimiter`)?.value || '';
+            serialized.removeEmptyLines = documentRef.getElementById(`${id}-remove-empty-lines`)?.checked === true;
+            serialized.previewEnabled = documentRef.getElementById(`${id}-preview-enabled`)?.checked === true;
+            serialized.parts = Array.isArray(node.data?.parts) ? node.data.parts.slice() : [];
         }
         return serialized;
     }

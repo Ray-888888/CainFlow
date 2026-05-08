@@ -158,6 +158,9 @@ export function createWorkflowRunnerApi({
         const toIndex = order.indexOf(nodeId);
         if (fromIndex === -1 || toIndex === -1 || fromIndex >= toIndex) return false;
 
+        if (fromNode.el?.querySelector(`.node-port[data-direction="output"][data-port="${connection.from.port}"][data-type="text"]`)) {
+            return true;
+        }
         const outputs = nodeConfigs[fromNode.type]?.outputs || [];
         return outputs.some((output) => output.name === connection.from.port && output.type === 'text');
     }

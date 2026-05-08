@@ -10,6 +10,7 @@ import {
     normalizeImageResolutionForModel,
     validateOpenAiImageSize
 } from '../features/execution/provider-request-utils.js';
+import { splitTextForTextSplitNode } from '../core/common-utils.js';
 
 export function createNodeDomBindingsApi({
     state,
@@ -34,6 +35,9 @@ export function createNodeDomBindingsApi({
     debounce,
     fitNodeToContent = () => {},
     getNodeMinimumSizeFromLifecycle = null,
+    updateAllConnections = () => {},
+    updatePortStyles = () => {},
+    onConnectionsChanged = () => {},
     documentRef = document
 }) {
     const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container';
@@ -45,6 +49,191 @@ export function createNodeDomBindingsApi({
         const textarea = documentRef.getElementById(`${id}-text`);
         if (!node || !textarea) return;
         node.data.text = textarea.value;
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function getTextSplitParts(id) {
+        const node = state.nodes.get(id);
+        const delimiterInput = documentRef.getElementById(`${id}-delimiter`);
+        const removeEmptyLinesInput = documentRef.getElementById(`${id}-remove-empty-lines`);
+        return splitTextForTextSplitNode(node?.data?.text || '', delimiterInput?.value || '', {
+            removeEmptyLines: removeEmptyLinesInput?.checked === true
+        });
+    }
+
+    function renderTextSplitOutputPort(id, index) {
+        const portName = `part_${index + 1}`;
+        return `<div class="node-port output" data-node-id="${id}" data-port="${portName}" data-type="text" data-direction="output">
+                <span class="port-label">片段 ${index + 1}</span>
+                <div class="port-dot type-text"></div>
+            </div>`;
+    }
+
+    function getTextSplitOutputCount(id) {
+        return Math.max(1, getTextSplitParts(id).length);
+    }
+
+    function bindPortInteraction(portEl) {
+        if (!portEl || portEl.dataset.bound === '1') return;
+        portEl.dataset.bound = '1';
+        const dot = portEl.querySelector('.port-dot');
+        if (!dot) return;
+
+        dot.addEventListener('mousedown', (e) => {
+            const isPanAction = e.button === 1 || (e.button === 0 && e.altKey);
+            if (isPanAction) return;
+            e.stopPropagation();
+            e.preventDefault();
+            const nodeId = portEl.dataset.nodeId;
+            if (blockRunningNodeMutation(nodeId, e, '节点正在运行，暂不能修改连线')) return;
+
+            const tgt = {
+                nodeId: portEl.dataset.nodeId,
+                port: portEl.dataset.port,
+                type: portEl.dataset.type,
+                dir: portEl.dataset.direction
+            };
+
+            if (state.connecting) {
+                if (finishConnection(state.connecting, tgt)) {
+                    state.connecting = null;
+                    tempConnection.setAttribute('d', '');
+                }
+                return;
+            }
+
+            const dotRect = dot.getBoundingClientRect();
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const { x: cx, y: cy, zoom } = state.canvas;
+            state.connecting = {
+                nodeId: portEl.dataset.nodeId,
+                portName: portEl.dataset.port,
+                dataType: portEl.dataset.type,
+                isOutput: portEl.dataset.direction === 'output',
+                startX: (dotRect.left + dotRect.width / 2 - containerRect.left - cx) / zoom,
+                startY: (dotRect.top + dotRect.height / 2 - containerRect.top - cy) / zoom,
+                screenX: e.clientX,
+                screenY: e.clientY,
+                dragged: false
+            };
+            documentRef.body.classList.add('is-interacting');
+        });
+
+        dot.addEventListener('mouseup', (e) => {
+            if (!state.connecting) return;
+            e.stopPropagation();
+            const nodeId = portEl.dataset.nodeId;
+            if (blockRunningNodeMutation(nodeId, e, '节点正在运行，暂不能修改连线')) {
+                tempConnection.setAttribute('d', '');
+                state.connecting = null;
+                return;
+            }
+
+            const src = state.connecting;
+            const tgt = {
+                nodeId: portEl.dataset.nodeId,
+                port: portEl.dataset.port,
+                type: portEl.dataset.type,
+                dir: portEl.dataset.direction
+            };
+
+            if (src.nodeId !== tgt.nodeId || src.portName !== tgt.port) {
+                if (finishConnection(src, tgt)) {
+                    state.connecting = null;
+                    tempConnection.setAttribute('d', '');
+                }
+            } else if (src.dragged) {
+                state.connecting = null;
+                tempConnection.setAttribute('d', '');
+            }
+        });
+    }
+
+    function bindNodePorts(container) {
+        container?.querySelectorAll('.node-port').forEach((portEl) => bindPortInteraction(portEl));
+    }
+
+    function refreshTextSplitOutputPorts(nodeId, nextCount = getTextSplitOutputCount(nodeId)) {
+        const node = state.nodes.get(nodeId);
+        if (!node?.el) return;
+        const outputsSection = node.el.querySelector('.node-outputs-section');
+        if (!outputsSection) return;
+
+        const currentPorts = Array.from(outputsSection.querySelectorAll('.node-port.output')).map((port) => port.dataset.port);
+        const nextPorts = Array.from({ length: nextCount }, (_, index) => `part_${index + 1}`);
+        const unchanged = currentPorts.length === nextPorts.length && currentPorts.every((port, index) => port === nextPorts[index]);
+        if (unchanged) return;
+
+        outputsSection.innerHTML = nextPorts.map((_, index) => renderTextSplitOutputPort(nodeId, index)).join('');
+        bindNodePorts(outputsSection);
+
+        const validPortSet = new Set(nextPorts);
+        const beforeConnectionCount = state.connections.length;
+        state.connections = state.connections.filter((connection) => (
+            connection.from.nodeId !== nodeId || validPortSet.has(connection.from.port)
+        ));
+        const removedConnections = beforeConnectionCount !== state.connections.length;
+        updateAllConnections();
+        updatePortStyles();
+        if (removedConnections) onConnectionsChanged();
+        scheduleSave();
+    }
+
+    function syncTextSplitNodeData(id, options = {}) {
+        const { refreshPorts = true } = options;
+        const node = state.nodes.get(id);
+        const delimiterInput = documentRef.getElementById(`${id}-delimiter`);
+        const removeEmptyLinesInput = documentRef.getElementById(`${id}-remove-empty-lines`);
+        const previewEnabledInput = documentRef.getElementById(`${id}-preview-enabled`);
+        if (!node || !delimiterInput) return;
+
+        const removeEmptyLines = removeEmptyLinesInput?.checked === true;
+        const previewEnabled = previewEnabledInput?.checked === true;
+        const parts = splitTextForTextSplitNode(node.data?.text || '', delimiterInput.value, { removeEmptyLines });
+        node.data.delimiter = delimiterInput.value;
+        node.data.removeEmptyLines = removeEmptyLines;
+        node.data.previewEnabled = previewEnabled;
+        node.data.parts = parts;
+        Object.keys(node.data).forEach((key) => {
+            if (/^part_\d+$/.test(key)) delete node.data[key];
+        });
+        parts.forEach((part, index) => {
+            node.data[`part_${index + 1}`] = part;
+        });
+
+        const summary = documentRef.getElementById(`${id}-split-summary`);
+        if (summary) {
+            const delimiterText = delimiterInput.value
+                ? `按 ${JSON.stringify(delimiterInput.value)} 分割`
+                : '未设置分隔字符串，整段作为一个输出';
+            const emptyLineText = removeEmptyLines ? '，已删除空行' : '';
+            summary.textContent = `${delimiterText}${emptyLineText}，当前 ${Math.max(1, parts.length)} 个输出端口`;
+        }
+
+        const preview = documentRef.getElementById(`${id}-split-preview`);
+        if (preview) {
+            preview.classList.toggle('hidden', !previewEnabled);
+            preview.innerHTML = parts.length > 0
+                ? parts.map((part, index) => `
+                    <div class="text-split-preview-item">
+                        <div class="text-split-preview-label">片段 ${index + 1}</div>
+                        <pre class="text-split-preview-text">${escapeHtml(part)}</pre>
+                    </div>
+                `).join('')
+                : '<div class="text-split-preview-empty">运行后显示分割结果</div>';
+        }
+
+        if (refreshPorts) {
+            refreshTextSplitOutputPorts(id, Math.max(1, parts.length));
+        }
     }
 
     function getRememberedNodeDefault(type) {
@@ -114,6 +303,8 @@ export function createNodeDomBindingsApi({
 
     function bindExpandableElementResize(nodeId, element) {
         if (!element || typeof ResizeObserver === 'undefined') return;
+        const node = state.nodes.get(nodeId);
+        if (node?.type === 'Text' || node?.type === 'TextSplit') return;
 
         let frameId = null;
         const scheduleFit = () => {
@@ -138,6 +329,33 @@ export function createNodeDomBindingsApi({
         });
 
         setTimeout(scheduleFit, 0);
+    }
+
+    function bindTextareaHeightPersistence(element) {
+        if (!element || element.dataset.heightPersistenceBound === '1' || typeof ResizeObserver === 'undefined') return;
+        element.dataset.heightPersistenceBound = '1';
+
+        let observedHeight = Math.round(element.offsetHeight || 0);
+        let frameId = null;
+        const observer = new ResizeObserver(() => {
+            const nextHeight = Math.round(element.offsetHeight || 0);
+            if (!nextHeight || Math.abs(nextHeight - observedHeight) <= 1) return;
+            observedHeight = nextHeight;
+            if (frameId !== null) return;
+            frameId = requestAnimationFrame(() => {
+                frameId = null;
+                scheduleSave();
+            });
+        });
+        observer.observe(element);
+
+        if (!Array.isArray(element._cleanupFns)) {
+            element._cleanupFns = [];
+        }
+        element._cleanupFns.push(() => {
+            observer.disconnect();
+            if (frameId !== null) cancelAnimationFrame(frameId);
+        });
     }
 
     function syncImageGenerateResolutionOptions(id) {
@@ -341,6 +559,14 @@ export function createNodeDomBindingsApi({
         const minHeight = getPx(style, 'min-height');
         const marginY = getOuterExtras(style, 'y');
 
+        if (el.classList.contains('text-split-preview')) {
+            return Math.ceil(minHeight + marginY);
+        }
+
+        if (el.classList.contains('chat-response-wrapper') || el.classList.contains('chat-response-area')) {
+            return Math.ceil(minHeight + marginY);
+        }
+
         if (isResizableMediaElement(el)) {
             return Math.ceil(minHeight + marginY);
         }
@@ -461,6 +687,10 @@ export function createNodeDomBindingsApi({
             Array.from(body.children).forEach((child) => {
                 if (!isVisibleElement(child)) return;
                 minContentWidth = Math.max(minContentWidth, getElementMinimumWidth(child));
+
+                if (child.classList.contains('text-split-preview')) {
+                    return;
+                }
 
                 if (child.classList.contains('node-field')) {
                     const childStyle = getComputedStyle(child);
@@ -629,13 +859,15 @@ export function createNodeDomBindingsApi({
             const defaultMinimum = typeof getNodeMinimumSizeFromLifecycle === 'function'
                 ? getNodeMinimumSizeFromLifecycle(node)
                 : getConfiguredDefaultSize(node, el, 180);
+            const currentWidth = el.offsetWidth || Number(node?.width) || defaultMinimum.minWidth;
+            const currentHeight = el.offsetHeight || Number(node?.height) || defaultMinimum.minHeight;
 
             state.resizing = {
                 nodeId: id,
                 startX: e.clientX,
                 startY: e.clientY,
-                startWidth: el.offsetWidth,
-                startHeight: el.offsetHeight,
+                startWidth: currentWidth,
+                startHeight: currentHeight,
                 minWidth: defaultMinimum.minWidth,
                 minHeight: defaultMinimum.minHeight,
                 maxHeight: node?.maxHeight || null
@@ -647,75 +879,7 @@ export function createNodeDomBindingsApi({
             documentRef.getElementById('connections-group').classList.add('is-interacting');
         });
 
-        el.querySelectorAll('.node-port').forEach((portEl) => {
-            const dot = portEl.querySelector('.port-dot');
-            dot.addEventListener('mousedown', (e) => {
-                const isPanAction = e.button === 1 || (e.button === 0 && e.altKey);
-                if (isPanAction) return;
-                e.stopPropagation();
-                e.preventDefault();
-                if (blockRunningNodeMutation(id, e, '节点正在运行，暂不能修改连线')) return;
-
-                const tgt = {
-                    nodeId: portEl.dataset.nodeId,
-                    port: portEl.dataset.port,
-                    type: portEl.dataset.type,
-                    dir: portEl.dataset.direction
-                };
-
-                if (state.connecting) {
-                    if (finishConnection(state.connecting, tgt)) {
-                        state.connecting = null;
-                        tempConnection.setAttribute('d', '');
-                    }
-                    return;
-                }
-
-                const dotRect = dot.getBoundingClientRect();
-                const containerRect = canvasContainer.getBoundingClientRect();
-                const { x: cx, y: cy, zoom } = state.canvas;
-                state.connecting = {
-                    nodeId: portEl.dataset.nodeId,
-                    portName: portEl.dataset.port,
-                    dataType: portEl.dataset.type,
-                    isOutput: portEl.dataset.direction === 'output',
-                    startX: (dotRect.left + dotRect.width / 2 - containerRect.left - cx) / zoom,
-                    startY: (dotRect.top + dotRect.height / 2 - containerRect.top - cy) / zoom,
-                    screenX: e.clientX,
-                    screenY: e.clientY,
-                    dragged: false
-                };
-                documentRef.body.classList.add('is-interacting');
-            });
-
-            dot.addEventListener('mouseup', (e) => {
-                if (!state.connecting) return;
-                e.stopPropagation();
-                if (blockRunningNodeMutation(id, e, '节点正在运行，暂不能修改连线')) {
-                    tempConnection.setAttribute('d', '');
-                    state.connecting = null;
-                    return;
-                }
-
-                const src = state.connecting;
-                const tgt = {
-                    nodeId: portEl.dataset.nodeId,
-                    port: portEl.dataset.port,
-                    type: portEl.dataset.type,
-                    dir: portEl.dataset.direction
-                };
-
-                if (src.nodeId !== tgt.nodeId || src.portName !== tgt.port) {
-                    if (finishConnection(src, tgt)) {
-                        state.connecting = null;
-                        tempConnection.setAttribute('d', '');
-                    }
-                } else if (src.dragged) {
-                    state.connecting = null;
-                    tempConnection.setAttribute('d', '');
-                }
-            });
-        });
+        bindNodePorts(el);
 
         if (type === 'ImageImport') setupImageImport(id, el);
         else if (type === 'ImageGenerate') {
@@ -799,6 +963,8 @@ export function createNodeDomBindingsApi({
             }
         } else if (type === 'Text') {
             syncTextNodeData(id);
+        } else if (type === 'TextSplit') {
+            syncTextSplitNodeData(id);
         }
 
         el.querySelectorAll('input, select, textarea').forEach((input) => {
@@ -809,15 +975,23 @@ export function createNodeDomBindingsApi({
                 input.addEventListener('input', () => syncTextNodeData(id));
                 input.addEventListener('change', () => syncTextNodeData(id));
             }
+            if (type === 'TextSplit' && (input.id === `${id}-delimiter` || input.id === `${id}-remove-empty-lines` || input.id === `${id}-preview-enabled`)) {
+                input.addEventListener('input', () => syncTextSplitNodeData(id));
+                input.addEventListener('change', () => syncTextSplitNodeData(id));
+            }
 
             const isExpandable = input.closest('.node-field-expand');
             if (input.tagName === 'TEXTAREA' && isExpandable) {
                 bindExpandableElementResize(id, input);
             }
+            if (input.tagName === 'TEXTAREA') {
+                bindTextareaHeightPersistence(input);
+            }
         });
     }
 
     return {
-        bindNodeInteractions
+        bindNodeInteractions,
+        syncTextSplitNodeData
     };
 }

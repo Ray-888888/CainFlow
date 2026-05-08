@@ -10,6 +10,7 @@ import {
     getModelsForTask,
     normalizeImageResolutionForModel
 } from '../features/execution/provider-request-utils.js';
+import { splitTextForTextSplitNode } from '../core/common-utils.js';
 
 function renderPorts(id, ports, direction) {
     if (!ports.length) return '';
@@ -29,6 +30,43 @@ function renderPorts(id, ports, direction) {
     }).join('');
 
     return `<div class="node-${direction === 'input' ? 'inputs' : 'outputs'}-section">${items}</div>`;
+}
+
+function getTextSplitTextValue(restoreData = {}) {
+    const rd = restoreData || {};
+    return rd.text || rd.lastText || '';
+}
+
+function getTextSplitDelimiterValue(restoreData = {}) {
+    const rd = restoreData || {};
+    return rd.delimiter !== undefined ? rd.delimiter : '\n\n';
+}
+
+function getTextSplitRemoveEmptyLinesValue(restoreData = {}) {
+    const rd = restoreData || {};
+    return rd.removeEmptyLines === true;
+}
+
+function getTextSplitPreviewEnabledValue(restoreData = {}) {
+    const rd = restoreData || {};
+    return rd.previewEnabled === true;
+}
+
+function getTextSplitOutputPorts(restoreData = {}) {
+    const rd = restoreData || {};
+    const parts = Array.isArray(rd.parts) && rd.parts.length > 0
+        ? rd.parts
+        : splitTextForTextSplitNode(
+            getTextSplitTextValue(rd),
+            getTextSplitDelimiterValue(rd),
+            { removeEmptyLines: getTextSplitRemoveEmptyLinesValue(rd) }
+        );
+    const count = Math.max(1, parts.length);
+    return Array.from({ length: count }, (_, index) => ({
+        name: `part_${index + 1}`,
+        type: 'text',
+        label: `片段 ${index + 1}`
+    }));
 }
 
 function renderPortSections(id, config) {
@@ -105,6 +143,11 @@ function renderImageResolutionOptions(model, providers, selectedResolution) {
             return `<option value="${option.value}" ${selected}>${option.label}</option>`;
         })
         .join('');
+}
+
+function getTextareaHeightStyle(restoreData = {}, key) {
+    const height = Number(restoreData?.textareaHeights?.[key]);
+    return Number.isFinite(height) && height > 0 ? ` style="height:${Math.round(height)}px"` : '';
 }
 
 function renderImageImportBody(id, restoreData) {
@@ -229,7 +272,7 @@ function renderImageGenerateBody(id, restoreData, models, providers) {
             <div style="font-size:11px;color:var(--text-dim);line-height:1.45;">提示：这些额外参数是否生效，取决于所选模型的兼容格式。Google / Gemini 生图通常支持宽高比和搜索，OpenAI 兼容图片接口大多只使用提示词和 size。</div>
         </div>
         <div class="node-field node-field-expand"><label>提示词</label>
-            <textarea id="${id}-prompt" placeholder="描述你想生成的图片..." rows="3">${rd.prompt || ''}</textarea></div>
+            <textarea id="${id}-prompt" placeholder="描述你想生成的图片..." rows="3"${getTextareaHeightStyle(rd, 'prompt')}>${rd.prompt || ''}</textarea></div>
         <div class="node-error-msg" id="${id}-error"></div>
     `;
 }
@@ -248,13 +291,13 @@ function renderTextChatBody(id, restoreData, models, providers) {
         <div class="node-field"><label>API 配置</label><select id="${id}-apiconfig">${opts}</select></div>
         <div class="node-field ${modelProviders.length > 1 ? '' : 'hidden'}" id="${id}-provider-field"><label>供应商</label><select id="${id}-provider">${providerOptions || '<option value="">-- 暂无可用供应商 --</option>'}</select></div>
         <div class="node-field"><label>系统提示语（可选）</label>
-            <textarea id="${id}-sysprompt" placeholder="设定 AI 的角色或背景..." rows="2">${rd.sysprompt || ''}</textarea></div>
+            <textarea id="${id}-sysprompt" placeholder="设定 AI 的角色或背景..." rows="2"${getTextareaHeightStyle(rd, 'sysprompt')}>${rd.sysprompt || ''}</textarea></div>
         <div class="node-field node-field-row"><label>启用搜索</label>
             <label class="toggle-switch"><input type="checkbox" id="${id}-search" ${rd.search ? 'checked' : ''} /><span class="toggle-slider"></span></label></div>
         <div class="node-field node-field-row"><label>固定结果</label>
             <label class="toggle-switch"><input type="checkbox" id="${id}-fixed" ${rd.fixed ? 'checked' : ''} /><span class="toggle-slider"></span></label></div>
         <div class="node-field"><label>提问内容</label>
-            <textarea id="${id}-prompt" placeholder="输入你的问题..." rows="3">${rd.prompt || ''}</textarea></div>
+            <textarea id="${id}-prompt" placeholder="输入你的问题..." rows="3"${getTextareaHeightStyle(rd, 'prompt')}>${rd.prompt || ''}</textarea></div>
         <div class="node-field node-field-expand"><label>对话回复</label>
             <div class="chat-response-wrapper" id="${id}-wrapper">
                 <button class="chat-copy-btn" id="${id}-copy-btn" title="复制回复内容">
@@ -379,8 +422,37 @@ function renderTextBody(id, restoreData) {
     const rd = restoreData || {};
     return `
         <div class="node-field node-field-expand">
-            <textarea id="${id}-text" placeholder="输入文本，或运行后预览上游文本..." rows="6">${rd.text || rd.lastText || ''}</textarea>
+            <textarea id="${id}-text" placeholder="输入文本，或运行后预览上游文本..." rows="6"${getTextareaHeightStyle(rd, 'text')}>${rd.text || rd.lastText || ''}</textarea>
         </div>
+    `;
+}
+
+function renderTextSplitBody(id, restoreData) {
+    const rd = restoreData || {};
+    const delimiter = getTextSplitDelimiterValue(rd);
+    const removeEmptyLines = getTextSplitRemoveEmptyLinesValue(rd);
+    const previewEnabled = getTextSplitPreviewEnabledValue(rd);
+    return `
+        <div class="node-field">
+            <label>分隔字符串</label>
+            <textarea id="${id}-delimiter" class="text-split-delimiter" placeholder="输入用于分割文本的字符串" rows="2"${getTextareaHeightStyle(rd, 'delimiter')}>${delimiter}</textarea>
+        </div>
+        <div class="node-field node-field-row">
+            <label>删除空行</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="${id}-remove-empty-lines" ${removeEmptyLines ? 'checked' : ''} />
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="node-field node-field-row">
+            <label>开启节点内预览</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="${id}-preview-enabled" ${previewEnabled ? 'checked' : ''} />
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="text-split-summary" id="${id}-split-summary"></div>
+        <div class="text-split-preview ${previewEnabled ? '' : 'hidden'}" id="${id}-split-preview"></div>
     `;
 }
 
@@ -419,14 +491,18 @@ function renderNodeBody(type, id, restoreData, state) {
     if (type === 'ImagePreview') return renderImagePreviewBody(id);
     if (type === 'ImageCompare') return renderImageCompareBody(id);
     if (type === 'Text') return renderTextBody(id, restoreData);
+    if (type === 'TextSplit') return renderTextSplitBody(id, restoreData);
     if (type === 'ImageSave') return renderImageSaveBody(id, restoreData, state.globalSaveDirHandle);
     return '';
 }
 
 export function createNodeMarkup({ type, id, config, restoreData, state }) {
+    const effectiveConfig = type === 'TextSplit'
+        ? { ...config, outputs: getTextSplitOutputPorts(restoreData) }
+        : config;
     return [
-        renderNodeHeader(id, config),
-        renderPortSections(id, config),
+        renderNodeHeader(id, effectiveConfig),
+        renderPortSections(id, effectiveConfig),
         renderNodeBody(type, id, restoreData, state),
         '</div>'
     ].join('');

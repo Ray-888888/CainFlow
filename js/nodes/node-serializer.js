@@ -2,6 +2,18 @@
  * 负责节点与连接的序列化和反序列化，为保存、导入、撤销和工作流复制提供数据结构转换。
  */
 export function createNodeSerializer({ state, documentRef }) {
+    function getNodeTextareaHeights(id) {
+        const heights = {};
+        documentRef.querySelectorAll(`#${id} textarea[id^="${id}-"]`).forEach((textarea) => {
+            const key = textarea.id.slice(`${id}-`.length);
+            const height = textarea.offsetHeight || parseFloat(textarea.style.height || '0');
+            if (key && Number.isFinite(height) && height > 0) {
+                heights[key] = Math.round(height);
+            }
+        });
+        return Object.keys(heights).length > 0 ? heights : null;
+    }
+
     function serializeNodes(includeImages = false) {
         const nodes = [];
         for (const [id, node] of state.nodes) {
@@ -15,6 +27,8 @@ export function createNodeSerializer({ state, documentRef }) {
                 enabled: node.enabled,
                 lastDuration: node.lastDuration || null
             };
+            const textareaHeights = getNodeTextareaHeights(id);
+            if (textareaHeights) serialized.textareaHeights = textareaHeights;
 
             if (includeImages && node.imageData) {
                 serialized.imageData = node.imageData;
@@ -70,6 +84,13 @@ export function createNodeSerializer({ state, documentRef }) {
             }
             if (node.type === 'Text') {
                 serialized.text = documentRef.getElementById(`${id}-text`)?.value || '';
+            }
+            if (node.type === 'TextSplit') {
+                serialized.text = node.data?.text || '';
+                serialized.delimiter = documentRef.getElementById(`${id}-delimiter`)?.value || '';
+                serialized.removeEmptyLines = documentRef.getElementById(`${id}-remove-empty-lines`)?.checked === true;
+                serialized.previewEnabled = documentRef.getElementById(`${id}-preview-enabled`)?.checked === true;
+                serialized.parts = Array.isArray(node.data?.parts) ? node.data.parts.slice() : [];
             }
 
             nodes.push(serialized);

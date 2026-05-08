@@ -12,3 +12,21 @@ export function debounce(fn, ms, setTimeoutRef = setTimeout, clearTimeoutRef = c
         timer = setTimeoutRef(() => fn(...args), ms);
     };
 }
+
+export function splitTextForTextSplitNode(text, delimiter, options = {}) {
+    const source = String(text || '');
+    const separator = String(delimiter || '');
+    const removeEmptyLines = options.removeEmptyLines === true;
+    const parts = !source
+        ? []
+        : (!separator ? [source] : source.split(separator));
+
+    if (!removeEmptyLines) return parts;
+
+    return parts
+        .map((part) => String(part || '')
+            .split(/\r\n|\r|\n/)
+            .filter((line) => line.trim().length > 0)
+            .join('\n'))
+        .filter((part) => part.trim().length > 0);
+}

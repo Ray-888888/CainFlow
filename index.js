@@ -384,7 +384,10 @@ const nodeDomBindingsApi = createNodeDomBindingsApi({
     scheduleSave,
     debounce,
     fitNodeToContent,
-    getNodeMinimumSizeFromLifecycle: (nodeOrId) => getNodeLifecycleApi().getNodeMinimumSize(nodeOrId)
+    getNodeMinimumSizeFromLifecycle: (nodeOrId) => getNodeLifecycleApi().getNodeMinimumSize(nodeOrId),
+    updateAllConnections: () => updateAllConnections(),
+    updatePortStyles: () => updatePortStyles(),
+    onConnectionsChanged: () => refreshAllImageResizePreviews()
 });
 const {
     getPortPosition,
@@ -662,7 +665,8 @@ function getContextMenuControllerApi() {
             addNode,
             runWorkflow,
             createNodeFromConnectionCandidate: (source, candidate, x, y) => createNodeFromConnectionCandidate(source, candidate, x, y),
-            updateAllConnections
+            updateAllConnections,
+            showToast
         });
     }
     return contextMenuControllerApi;
@@ -770,6 +774,7 @@ function getExecutionCoreApi() {
         executionCoreApi = createExecutionCoreApi({
             state,
             nodeConfigs: NODE_CONFIGS,
+            syncTextSplitNodeData: (nodeId) => nodeDomBindingsApi.syncTextSplitNodeData(nodeId),
             showToast,
             addLog,
             getProxyHeaders,

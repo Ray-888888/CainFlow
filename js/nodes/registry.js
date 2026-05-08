@@ -9,6 +9,7 @@ import { imagePreviewNode } from './types/image-preview.js';
 import { imageSaveNode } from './types/image-save.js';
 import { textChatNode } from './types/text-chat.js';
 import { textNode } from './types/text.js';
+import { textSplitNode } from './types/text-split.js';
 
 const nodeDefinitions = [
     imageImportNode,
@@ -17,6 +18,7 @@ const nodeDefinitions = [
     imageGenerateNode,
     textChatNode,
     textNode,
+    textSplitNode,
     imagePreviewNode,
     imageSaveNode
 ];

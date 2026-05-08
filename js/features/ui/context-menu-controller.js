@@ -11,6 +11,7 @@ export function createContextMenuControllerApi({
     runWorkflow,
     createNodeFromConnectionCandidate,
     updateAllConnections,
+    showToast = null,
     documentRef = document
 }) {
     function setElementVisible(element, visible) {
@@ -52,6 +53,7 @@ export function createContextMenuControllerApi({
     }
 
     let ignoreNextDocumentClickForConnectionPopup = false;
+    let ignoreNextContextMenuClick = false;
 
     function closeConnectionCreatePopup() {
         state.connectionCreatePopup = null;
@@ -63,6 +65,63 @@ export function createContextMenuControllerApi({
 
     function closeContextMenu() {
         contextMenu?.classList.add('hidden');
+    }
+
+    function handleContextMenuItemSelection(item) {
+        if (!item) return;
+
+        try {
+            if (item.id === 'context-menu-run-to-here') {
+                if (state.contextMenuNodeId) {
+                    runWorkflow({
+                        mode: 'target-node',
+                        targetNodeId: state.contextMenuNodeId
+                    });
+                }
+                return;
+            }
+
+            if (item.id === 'context-menu-run-selected') {
+                if (state.selectedNodes.size > 0) {
+                    runWorkflow({
+                        mode: 'selected-only',
+                        selectedNodeIds: Array.from(state.selectedNodes)
+                    });
+                }
+                return;
+            }
+
+            if (item.dataset.type) {
+                const pos = viewportApi.screenToCanvas(state.contextMenu.x, state.contextMenu.y);
+                const nodeId = addNode(item.dataset.type, pos.x, pos.y);
+                if (!nodeId && showToast) {
+                    showToast(`创建节点失败：${item.dataset.type}`, 'error');
+                }
+            }
+        } catch (error) {
+            if (showToast) {
+                showToast(`创建节点失败：${error.message || error}`, 'error', 5000);
+            }
+            throw error;
+        } finally {
+            closeContextMenu();
+        }
+    }
+
+    function positionFloatingMenu(menu, clientX, clientY) {
+        if (!menu) return;
+        const padding = 8;
+        menu.style.left = `${clientX}px`;
+        menu.style.top = `${clientY}px`;
+        menu.classList.remove('hidden');
+
+        const rect = menu.getBoundingClientRect();
+        const viewportWidth = documentRef.defaultView?.innerWidth || documentRef.documentElement.clientWidth || 0;
+        const viewportHeight = documentRef.defaultView?.innerHeight || documentRef.documentElement.clientHeight || 0;
+        const nextLeft = Math.max(padding, Math.min(clientX, viewportWidth - rect.width - padding));
+        const nextTop = Math.max(padding, Math.min(clientY, viewportHeight - rect.height - padding));
+        menu.style.left = `${nextLeft}px`;
+        menu.style.top = `${nextTop}px`;
     }
 
     function openConnectionCreatePopup(popupState) {
@@ -120,9 +179,7 @@ export function createContextMenuControllerApi({
                 hasSelection: state.selectedNodes.size > 0
             });
 
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
-            contextMenu.classList.remove('hidden');
+            positionFloatingMenu(contextMenu, e.clientX, e.clientY);
         });
 
         documentRef.addEventListener('click', (e) => {
@@ -146,33 +203,25 @@ export function createContextMenuControllerApi({
             }
         });
 
-        contextMenu.querySelectorAll('.context-menu-item').forEach((item) => {
-            item.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                    if (item.id === 'context-menu-run-to-here') {
-                        if (state.contextMenuNodeId) {
-                            runWorkflow({
-                                mode: 'target-node',
-                                targetNodeId: state.contextMenuNodeId
-                            });
-                        }
-                    } else if (item.id === 'context-menu-run-selected') {
-                        if (state.selectedNodes.size > 0) {
-                            runWorkflow({
-                                mode: 'selected-only',
-                                selectedNodeIds: Array.from(state.selectedNodes)
-                            });
-                        }
-                    } else if (item.dataset.type) {
-                        const pos = viewportApi.screenToCanvas(state.contextMenu.x, state.contextMenu.y);
-                        addNode(item.dataset.type, pos.x, pos.y);
-                    }
-                } finally {
-                    closeContextMenu();
-                }
-            });
+        contextMenu.addEventListener('pointerdown', (e) => {
+            const item = e.target.closest('.context-menu-item');
+            if (!item || !contextMenu.contains(item)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            ignoreNextContextMenuClick = true;
+            handleContextMenuItemSelection(item);
+        });
+
+        contextMenu.addEventListener('click', (e) => {
+            const item = e.target.closest('.context-menu-item');
+            if (!item || !contextMenu.contains(item)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (ignoreNextContextMenuClick) {
+                ignoreNextContextMenuClick = false;
+                return;
+            }
+            handleContextMenuItemSelection(item);
         });
 
         initConnectionCreatePopup();
