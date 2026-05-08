@@ -11,7 +11,7 @@
 | Core | `js/core/constants.js`, `js/core/elements.js`, `js/core/state.js` | 共享常量、DOM 引用、初始状态 |
 | Services | `js/services/api-client.js`, `js/services/storage-idb.js`, `js/services/workflow-api.js` | 代理请求头、IndexedDB、工作流文件 API |
 | Canvas | `js/canvas/geometry.js`, `js/canvas/selection.js`, `js/canvas/viewport.js` | 贝塞尔几何、框选、缩放和平移 |
-| 历史记录 | `js/features/history/history-panel.js` | 历史面板 UI 与相关交互 |
+| 历史记录 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js` | 侧边历史面板、历史预览、全屏历史浏览与按天分组工具 |
 | 日志 | `js/features/logs/log-panel.js` | 日志面板 UI、日志渲染、错误详情入口 |
 | 设置 | `js/features/settings/settings-controller.js`, `js/features/settings/settings-modal.js` | 设置数据加载、API配置与弹窗行为 |
 | 执行 | `js/features/execution/execution-core.js`, `js/features/execution/provider-request-utils.js` | 工作流拓扑排序、各类型节点底层通信与执行逻辑；供应商协议、OpenAI/Gemini 生图请求路径与分辨率预设 |
@@ -66,7 +66,7 @@
 | 修改 OpenAI 兼容生图请求路径、参考图上传或请求体格式 | `js/features/execution/provider-request-utils.js`, `js/features/execution/execution-core.js`, `js/services/api-client.js`, `backend/services/proxy_service.py` |
 | 修改生图节点分辨率菜单、OpenAI 自定义分辨率输入 | `js/features/execution/provider-request-utils.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js` |
 | 修复设置面板或配置交互 | `js/features/settings/settings-controller.js`, `js/features/settings/settings-modal.js`, `backend/routes/settings_routes.py`, `backend/services/security_service.py` |
-| 修复历史记录面板 | `js/features/history/history-panel.js`, `js/services/storage-idb.js`, `index.js` |
+| 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js`, `js/services/storage-idb.js`, `index.js` |
 | 修复日志面板或错误详情 | `js/features/logs/log-panel.js`, `index.js` |
 | 新增或修改节点类型 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `index.html` (右键菜单), `js/features/execution/execution-core.js` (执行逻辑) |
 | 修复节点交互行为 | `js/nodes/node-dom-bindings.js`, `js/features/media/media-controller.js` (针对媒体类节点) |

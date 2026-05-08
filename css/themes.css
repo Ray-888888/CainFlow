@@ -1456,6 +1456,46 @@ html[data-app-theme="light"] #history-settings-toolbar .grid-col-tool > div {
     border: 1px solid var(--border-color);
 }
 
+html[data-app-theme="light"] .history-fullscreen-overlay {
+    background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(20, 184, 166, 0.08), transparent 24%),
+        rgba(244, 247, 252, 0.92);
+}
+
+html[data-app-theme="light"] .history-fullscreen-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.98));
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+}
+
+html[data-app-theme="light"] .history-fullscreen-header,
+html[data-app-theme="light"] .history-fullscreen-batch-toolbar,
+html[data-app-theme="light"] .history-fullscreen-rail {
+    border-color: rgba(148, 163, 184, 0.18);
+}
+
+html[data-app-theme="light"] .history-fullscreen-group-header {
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(248, 250, 252, 0.74));
+}
+
+html[data-app-theme="light"] .history-card-meta {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(248, 250, 252, 0.82) 50%, rgba(241, 245, 249, 0.96) 100%);
+    color: var(--text-primary);
+}
+
+html[data-app-theme="light"] .history-card-meta-sub {
+    color: var(--text-secondary);
+}
+
+html[data-app-theme="light"] .history-fullscreen-rail-tooltip {
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--text-primary);
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+}
+
 html[data-app-theme="light"] #cache-sidebar .drawer-content > div[style*="margin-top: 28px;"] {
     border-top: 1px solid var(--border-color);
     padding-top: 20px;

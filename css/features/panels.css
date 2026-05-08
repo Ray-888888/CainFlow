@@ -542,3 +542,368 @@
         grid-template-columns: 1fr;
     }
 }
+
+.history-card-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 10px 10px 9px;
+    background:
+        linear-gradient(180deg, rgba(7, 11, 20, 0) 0%, rgba(7, 11, 20, 0.78) 45%, rgba(7, 11, 20, 0.94) 100%);
+    color: #f3f7ff;
+    pointer-events: none;
+}
+
+.history-card-compact .history-card-meta {
+    display: none;
+}
+
+.history-card-meta-main {
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.history-card-meta-sub {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: rgba(226, 235, 255, 0.72);
+}
+
+.history-fullscreen-overlay {
+    z-index: 9000;
+    align-items: stretch;
+    justify-content: center;
+    padding: 14px;
+    background:
+        radial-gradient(circle at top left, rgba(25, 86, 140, 0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(13, 148, 136, 0.12), transparent 26%),
+        rgba(3, 6, 14, 0.88);
+}
+
+.history-fullscreen-panel {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(14, 18, 28, 0.98), rgba(8, 11, 18, 0.98));
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.48);
+}
+
+.history-fullscreen-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.history-fullscreen-title-group,
+.history-fullscreen-title-row,
+.history-fullscreen-actions,
+.history-fullscreen-group-title {
+    display: flex;
+    align-items: center;
+}
+
+.history-fullscreen-title-group {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.history-fullscreen-title-row {
+    gap: 10px;
+}
+
+.history-fullscreen-title-row h2 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.history-fullscreen-count {
+    min-width: 34px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #dff7ff;
+    border: 1px solid rgba(34, 211, 238, 0.24);
+    background: rgba(34, 211, 238, 0.12);
+}
+
+.history-fullscreen-summary {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.history-fullscreen-actions {
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.history-fullscreen-batch-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.history-fullscreen-batch-toolbar.hidden {
+    display: none;
+}
+
+.history-fullscreen-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+}
+
+.history-fullscreen-scroll {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 18px 28px 22px;
+    scroll-behavior: smooth;
+}
+
+.history-fullscreen-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.history-fullscreen-empty {
+    padding: 28px;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.history-fullscreen-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-fullscreen-group-header {
+    position: sticky;
+    top: -18px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 2px 12px;
+    backdrop-filter: blur(12px);
+    background: linear-gradient(180deg, rgba(8, 11, 18, 0.98), rgba(8, 11, 18, 0.68));
+}
+
+.history-fullscreen-group-title {
+    gap: 10px;
+    min-width: 0;
+}
+
+.history-fullscreen-group-title h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.history-fullscreen-group-title span {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.history-fullscreen-group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+}
+
+.history-fullscreen-group-grid .history-card {
+    aspect-ratio: 1 / 1.18;
+    border-radius: 14px;
+}
+
+.history-fullscreen-group-grid .history-card img {
+    height: calc(100% - 72px);
+}
+
+.history-fullscreen-group-grid .history-card .delete-btn {
+    opacity: 1;
+}
+
+.history-fullscreen-rail {
+    position: relative;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 20px 12px 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.history-fullscreen-rail-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.history-fullscreen-timeline {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.history-timeline-marker {
+    width: 100%;
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.history-timeline-marker-line {
+    width: 34px;
+    height: 1px;
+    background: rgba(148, 163, 184, 0.4);
+    transition: background 0.2s ease, width 0.2s ease;
+}
+
+.history-timeline-marker-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.55);
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.08);
+    transition: all 0.2s ease;
+}
+
+.history-timeline-marker.active .history-timeline-marker-line,
+.history-timeline-marker:hover .history-timeline-marker-line {
+    width: 44px;
+    background: rgba(34, 211, 238, 0.66);
+}
+
+.history-timeline-marker.active .history-timeline-marker-dot,
+.history-timeline-marker:hover .history-timeline-marker-dot {
+    background: rgba(34, 211, 238, 0.96);
+    box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.12);
+}
+
+.history-fullscreen-rail-tooltip {
+    position: absolute;
+    right: calc(100% + 10px);
+    transform: translateY(-50%);
+    max-width: 240px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #eff8ff;
+    background: rgba(9, 13, 22, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.history-fullscreen-rail-tooltip.hidden {
+    display: none;
+}
+
+@media (max-width: 860px) {
+    .history-fullscreen-overlay {
+        padding: 0;
+    }
+
+    .history-fullscreen-panel {
+        border-radius: 0;
+    }
+
+    .history-fullscreen-header,
+    .history-fullscreen-batch-toolbar {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .history-fullscreen-body {
+        grid-template-columns: 1fr;
+    }
+
+    .history-fullscreen-scroll {
+        padding: 14px 14px 28px;
+    }
+
+    .history-fullscreen-rail {
+        order: -1;
+        border-left: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        flex-direction: row;
+        align-items: center;
+        padding: 10px 14px;
+    }
+
+    .history-fullscreen-timeline {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-right: 0;
+        padding-bottom: 2px;
+    }
+
+    .history-timeline-marker {
+        width: auto;
+        min-width: 28px;
+    }
+
+    .history-fullscreen-rail-tooltip {
+        display: none !important;
+    }
+
+    .history-fullscreen-group-grid {
+        grid-template-columns: 1fr;
+    }
+}

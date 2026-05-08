@@ -40,6 +40,7 @@ import { createNodeDomBindingsApi } from './js/nodes/node-dom-bindings.js';
 import { createNodeLifecycleApi } from './js/nodes/node-lifecycle.js';
 import { createHistoryPanelApi } from './js/features/history/history-panel.js';
 import { createHistoryPreviewApi } from './js/features/history/history-preview.js';
+import { createHistoryFullscreenApi } from './js/features/history/history-fullscreen.js';
 import { createMediaControllerApi } from './js/features/media/media-controller.js';
 import { createImagePainterApi } from './js/features/media/image-painter.js';
 import { createMediaUtils } from './js/features/media/media-utils.js';
@@ -178,6 +179,9 @@ function applyGlobalAnimationSetting() {
 
 async function renderHistoryList() {
     await getHistoryPanelApi().renderHistoryList();
+    if (historyFullscreenApi?.isOpen()) {
+        await historyFullscreenApi.refresh();
+    }
 }
 
 // 集中缓存常用 DOM 元素
@@ -211,6 +215,7 @@ let logPanelApi = null;
 let historyPanelApi = null;
 let settingsControllerApi = null;
 let historyPreviewApi = null;
+let historyFullscreenApi = null;
 let sessionManagerApi = null;
 let projectIoApi = null;
 let executionCoreApi = null;
@@ -254,6 +259,22 @@ function getHistoryPanelApi() {
         });
     }
     return historyPanelApi;
+}
+
+function getHistoryFullscreenApi() {
+    if (!historyFullscreenApi) {
+        historyFullscreenApi = createHistoryFullscreenApi({
+            state,
+            getHistory,
+            clearHistory,
+            deleteHistoryEntry,
+            deleteHistoryItems: (ids) => historyPreviewApi.deleteHistoryItems(ids),
+            openHistoryPreview: (item) => historyPreviewApi.openHistoryPreview(item),
+            downloadImage,
+            showToast
+        });
+    }
+    return historyFullscreenApi;
 }
 
 const updateManager = createUpdateManager({
@@ -502,6 +523,7 @@ function getUiControllerApi() {
             renderHistoryList,
             renderLogs,
             historyPreviewApi,
+            historyFullscreenApi: getHistoryFullscreenApi(),
             settingsControllerApi,
             applyHistoryGridCols,
             applyTheme: (mode) => getThemeControllerApi().applyTheme(mode),
@@ -882,6 +904,7 @@ historyPreviewApi = createHistoryPreviewApi({
 function initFeatureModules() {
     settingsControllerApi.initSettingsUI({ settingsModalApi });
     historyPreviewApi.initHistoryPreview();
+    getHistoryFullscreenApi().initHistoryFullscreen();
     helpPanelApi.initHelpPanel();
     updateManager.initRefreshNotice();
     workflowManagerApi.initWorkflow();

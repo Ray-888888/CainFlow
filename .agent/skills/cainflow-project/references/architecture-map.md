@@ -2,7 +2,7 @@
 
 当你需要判断代码该放哪里，或者应该先看哪些文件时，使用这份速查表。
 
-> 当前版本：v2.7.7.7
+> 当前版本：v2.7.8
 
 ## 前端结构
 
@@ -49,6 +49,8 @@
 | **历史记录** | | |
 | 历史面板 | `js/features/history/history-panel.js` | 历史面板 UI 与列表交互；历史图片拖拽和高级图片对比选图应携带 `item.image` 原图而不是缩略图 |
 | 历史预览 | `js/features/history/history-preview.js` | 历史记录条目预览渲染 |
+| 全屏历史 | `js/features/history/history-fullscreen.js` | 面向超大量历史记录的全屏纵向浏览、按天分组、右侧日期标尺定位与批量操作 |
+| 历史工具 | `js/features/history/history-utils.js` | 历史卡片渲染、按天分组、时间标签与通用转义工具 |
 | **提示词库** | | |
 | 提示词库管理 | `js/features/prompts/prompt-library.js` | 提示词预设的全屏管理界面行为、本地 `localStorage` 持久化、多选删除、导入/导出、导入前格式校验、导入项选择，以及导入画布时创建不重叠的 Text 节点 |
 | **日志** | | |
@@ -151,7 +153,7 @@
 | 修改节点端口位置、输入/输出端口顶部对齐或端口行结构 | `js/nodes/node-view-factory.js`, `css/legacy.css`, `js/canvas/connections.js` |
 | 修复设置面板或代理设置交互 | `js/features/settings/settings-modal.js`, `js/features/settings/settings-controller.js`, `backend/routes/settings_routes.py`, `backend/services/security_service.py` |
 | 修改 API 供应商卡片、获取模型列表弹窗、模型搜索或添加模型到模型管理 | `js/features/settings/settings-controller.js`, `js/services/api-client.js`, `js/features/execution/provider-request-utils.js`, `css/features/settings.css`, `index.css` |
-| 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/services/storage-idb.js` |
+| 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js`, `js/services/storage-idb.js` |
 | 修复历史记录图片拖拽到画布/节点 | `js/features/history/history-panel.js`, `js/features/ui/global-interactions.js`, `js/features/media/media-controller.js`, `js/core/state.js` |
 | 新增或修改提示词库管理、预设卡片、多选删除、复制、导入画布、提示词 JSON 导入导出 | `js/features/prompts/prompt-library.js`, `index.html`, `index.js`, `css/features/panels.css`, `css/themes.css` |
 | 修复日志面板或错误详情 | `js/features/logs/log-panel.js`, `backend/services/log_service.py` |

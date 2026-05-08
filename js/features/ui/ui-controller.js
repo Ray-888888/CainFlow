@@ -16,6 +16,7 @@ export function createUiControllerApi({
     renderHistoryList,
     renderLogs,
     historyPreviewApi,
+    historyFullscreenApi,
     settingsControllerApi,
     applyHistoryGridCols,
     applyTheme = () => {},
@@ -270,10 +271,16 @@ export function createUiControllerApi({
             sidebar?.classList.remove('active');
         });
 
+        documentRef.getElementById('btn-expand-history')?.addEventListener('click', () => {
+            sidebar?.classList.remove('active');
+            historyFullscreenApi?.open();
+        });
+
         documentRef.getElementById('btn-clear-history')?.addEventListener('click', async () => {
             if (confirmRef('确定要清空所有历史记录吗？此操作无法撤销。')) {
                 await clearHistory();
                 renderHistoryList();
+                historyFullscreenApi?.refresh();
                 showToast('历史记录已清空', 'info');
             }
         });
@@ -317,6 +324,7 @@ export function createUiControllerApi({
             state.selectedHistoryIds.clear();
             documentRef.getElementById('history-batch-toolbar').classList.remove('hidden');
             renderHistoryList();
+            historyFullscreenApi?.refresh();
         });
 
         documentRef.getElementById('btn-batch-select-all')?.addEventListener('click', async () => {

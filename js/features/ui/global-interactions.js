@@ -101,6 +101,7 @@ export function createGlobalInteractionsApi({
 
             if (e.key === 'Escape') {
                 documentRef.getElementById('history-preview-modal')?.classList.add('hidden');
+                documentRef.getElementById('history-fullscreen-modal')?.classList.add('hidden');
                 documentRef.getElementById('history-sidebar')?.classList.remove('active');
                 documentRef.getElementById('log-drawer')?.classList.remove('active');
                 if (settingsModal && !settingsModal.classList.contains('hidden')) {
