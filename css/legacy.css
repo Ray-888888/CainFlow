@@ -1172,23 +1172,46 @@ body {
     color: var(--text-primary);
 }
 
-/* Port styles 鈥?inputs section at top, outputs section at bottom */
+/* Port styles */
+.node-ports-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 18px;
+    align-items: start;
+    margin-bottom: 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.node-ports-row.has-inputs-only,
+.node-ports-row.has-outputs-only {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.node-ports-row.has-outputs-only .node-outputs-section {
+    justify-self: end;
+    width: 100%;
+}
+
+.node-ports-row.has-inputs-only .node-inputs-section {
+    justify-self: start;
+    width: 100%;
+}
+
 .node-inputs-section {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-bottom: 4px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    min-width: 0;
+    align-self: start;
 }
 
 .node-outputs-section {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-top: 4px;
-    padding-top: 6px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    min-width: 0;
+    align-self: start;
 }
 
 .node-port {

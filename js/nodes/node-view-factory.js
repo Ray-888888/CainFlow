@@ -31,6 +31,25 @@ function renderPorts(id, ports, direction) {
     return `<div class="node-${direction === 'input' ? 'inputs' : 'outputs'}-section">${items}</div>`;
 }
 
+function renderPortSections(id, config) {
+    const inputPorts = renderPorts(id, config.inputs || [], 'input');
+    const outputPorts = renderPorts(id, config.outputs || [], 'output');
+
+    if (!inputPorts && !outputPorts) return '';
+
+    const rowClasses = ['node-ports-row'];
+    if (inputPorts && outputPorts) rowClasses.push('has-inputs', 'has-outputs');
+    else if (inputPorts) rowClasses.push('has-inputs-only');
+    else if (outputPorts) rowClasses.push('has-outputs-only');
+
+    return `
+        <div class="${rowClasses.join(' ')}">
+            ${inputPorts}
+            ${outputPorts}
+        </div>
+    `;
+}
+
 function renderNodeHeader(id, config) {
     return `
         <div class="node-glass-bg"></div>
@@ -407,9 +426,8 @@ function renderNodeBody(type, id, restoreData, state) {
 export function createNodeMarkup({ type, id, config, restoreData, state }) {
     return [
         renderNodeHeader(id, config),
-        renderPorts(id, config.inputs, 'input'),
+        renderPortSections(id, config),
         renderNodeBody(type, id, restoreData, state),
-        renderPorts(id, config.outputs, 'output'),
         '</div>'
     ].join('');
 }

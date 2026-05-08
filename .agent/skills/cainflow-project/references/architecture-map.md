@@ -87,10 +87,10 @@
 | 区域 | 主要文件 | 作用 |
 | --- | --- | --- |
 | 节点注册中心 | `js/nodes/registry.js` | 节点类型定义注册中心 |
-| 节点 DOM 绑定 | `js/nodes/node-dom-bindings.js` | 节点 DOM 事件绑定与输入监听、节点内控件值归一化；Text 节点编辑时只同步数据与保存，不自动缩放节点 |
+| 节点 DOM 绑定 | `js/nodes/node-dom-bindings.js` | 节点 DOM 事件绑定与输入监听、节点内控件值归一化；Text 节点编辑时只同步数据与保存，不自动缩放节点；ImageGenerate 等可扩展 textarea 只能在真实尺寸变化时触发 fit，点击/聚焦提示词框不得触发 shrink |
 | 节点生命周期 | `js/nodes/node-lifecycle.js` | 节点创建、销毁、状态更新；旧 TextInput/TextDisplay 创建时映射为 Text；Text 节点尺寸测量、非文本内容显示不全兜底、Alt 删除保留上下游连接、拖拽晃动摘取节点后的连线保留逻辑在这里；删除、摘取、启用/禁用必须跳过运行中节点 |
 | 序列化 | `js/nodes/node-serializer.js` | 节点序列化、会话状态 payload、workflow 导出结构；workflow 导出只含画布、节点、连线和版本号 |
-| 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮 |
+| 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮；节点端口区当前由顶部并排的 `.node-ports-row` 统一生成，输入/输出两列顶部对齐 |
 | 图片生成节点 | `js/nodes/types/image-generate.js` | ImageGenerate 节点定义、端口与默认尺寸 |
 | 图片导入节点 | `js/nodes/types/image-import.js` | ImageImport 节点定义 |
 | 图片对比节点 | `js/nodes/types/image-compare.js` | ImageCompare 节点定义，包含 A/B 图片输入与 B 图片输出 |
@@ -148,6 +148,7 @@
 | 修改 OpenAI 兼容生图请求路径、参考图上传或请求体格式 | `js/features/execution/provider-request-utils.js`, `js/features/execution/execution-core.js`, `js/services/api-client.js`, `backend/services/proxy_service.py` |
 | 修改生图节点分辨率菜单、OpenAI 自定义分辨率输入 | `js/features/execution/provider-request-utils.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js` |
 | 修改生图节点生成次数、成功计数或失败重试语义 | `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `js/features/execution/execution-core.js`, `js/features/execution/workflow-runner.js` |
+| 修改节点端口位置、输入/输出端口顶部对齐或端口行结构 | `js/nodes/node-view-factory.js`, `css/legacy.css`, `js/canvas/connections.js` |
 | 修复设置面板或代理设置交互 | `js/features/settings/settings-modal.js`, `js/features/settings/settings-controller.js`, `backend/routes/settings_routes.py`, `backend/services/security_service.py` |
 | 修改 API 供应商卡片、获取模型列表弹窗、模型搜索或添加模型到模型管理 | `js/features/settings/settings-controller.js`, `js/services/api-client.js`, `js/features/execution/provider-request-utils.js`, `css/features/settings.css`, `index.css` |
 | 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/services/storage-idb.js` |
@@ -222,7 +223,9 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - ImageGenerate 生成次数使用 `generationCount`：模板在 `js/nodes/node-view-factory.js`，最小值归一化和 +/- 事件在 `js/nodes/node-dom-bindings.js`，保存/导出在 `js/nodes/node-serializer.js`，复制粘贴在 `js/features/ui/clipboard-controller.js`，执行循环在 `js/features/execution/execution-core.js`。失败不计入次数；自动重试时通过运行时字段 `generationCompletedCount` 保留本轮已成功次数，`js/features/execution/workflow-runner.js` 负责新一轮运行前重置。
 - 媒体处理放 `js/features/media/`，不要堆回节点类型文件。
 - 图片类节点的定义、模板、DOM 绑定、媒体同步和执行输出要分层处理：`js/nodes/types/*.js` 只放元数据和端口；`js/nodes/node-view-factory.js` 只生成结构；`js/nodes/node-dom-bindings.js` 只接入节点事件；`js/features/media/media-controller.js` 负责图片显示状态、交互与依赖刷新；`js/features/execution/execution-core.js` 负责运行时输入校验、输出写入和向下游分发。
+- 节点端口位置先看 `js/nodes/node-view-factory.js` 与 `css/legacy.css`：当前输入/输出端口在顶部同一行并排展开，最上方端口需要左右对齐。`js/canvas/connections.js` 只负责按端口圆点实际 DOM 坐标取点，除非连线命中或路径本身有问题，不要为端口视觉位置改连线几何。
 - 文本节点统一使用 `Text`。`TextInput` / `TextDisplay` 只保留兼容 shim 和创建时映射，不要重新暴露为新建节点。Text 节点运行后不要自动设置大小；编辑文本时也不要自动缩放节点。若要改尺寸策略，先同时检查 `node-dom-bindings.js`、`node-lifecycle.js`、`execution-core.js` 和 `css/legacy.css`。
+- ImageGenerate / TextChat / Text 等带 textarea 的节点若出现“点击输入框后节点变小”，优先检查 `js/nodes/node-dom-bindings.js` 里的可扩展元素尺寸监听。只允许 `ResizeObserver` 等真实尺寸变化触发 fit，不要把 `mouseup`、`touchend`、focus/click 这类交互事件接到 shrink fit。
 - ImageCompare 高级模式继续沿用图片类节点分层：入口按钮和节点内结构放 `js/nodes/node-view-factory.js`；全屏高级对比界面、A/B 选择状态、从当前输入/画布图片节点/历史记录汇总图片、鼠标位置切割、滚轮缩放、左键平移和缩略图选择区展开放 `js/features/media/media-controller.js`；历史图片读取通过 `index.js` 注入 `getHistory`，来源在 `js/services/storage-idb.js`；样式集中在 `css/components/nodes.css`。高级模式选图显示可用缩略图，但设置 A/B 必须使用原图数据。
 - 历史记录面板显示可以使用 `item.thumb` 缩略图，但拖拽导入必须使用 `item.image` 原图。拖拽源在 `js/features/history/history-panel.js`，画布 drop 与现有 ImageImport 节点更新在 `js/features/ui/global-interactions.js`，直接写入 data URL 的能力放 `js/features/media/media-controller.js`。
 - 提示词库是独立功能域：全屏管理、预设卡片、多选删除、复制、JSON 导入/导出、导入文件校验和导入选择窗口放 `js/features/prompts/prompt-library.js`；左侧栏入口和面板骨架放 `index.html`；总装配只在 `index.js` 注入依赖并初始化。提示词预设当前使用 `localStorage` 键 `cainflow_prompt_library`，不是工作流文件、后端文件或 IndexedDB。导出 JSON 使用 `type: "cainflow-prompt-library"`、`version`、`prompts`；导入必须先校验格式，确认规范后再默认全选并允许用户选择导入项。导入画布时创建正式 `Text` 节点，位置查找应避免与现有节点重叠。

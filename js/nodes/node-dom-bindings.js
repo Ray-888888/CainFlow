@@ -129,16 +129,11 @@ export function createNodeDomBindingsApi({
         const observer = new ResizeObserver(() => scheduleFit());
         observer.observe(element);
 
-        element.addEventListener('mouseup', scheduleFit);
-        element.addEventListener('touchend', scheduleFit);
-
         if (!Array.isArray(element._cleanupFns)) {
             element._cleanupFns = [];
         }
         element._cleanupFns.push(() => {
             observer.disconnect();
-            element.removeEventListener('mouseup', scheduleFit);
-            element.removeEventListener('touchend', scheduleFit);
             if (frameId !== null) cancelAnimationFrame(frameId);
         });
 
