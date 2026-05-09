@@ -220,6 +220,7 @@ function renderImageGenerateBody(id, restoreData, models, providers) {
     const customWidth = rd.customWidth || customResolutionMatch?.[1] || '';
     const customHeight = rd.customHeight || customResolutionMatch?.[2] || '';
     const generationCount = Math.max(1, parseInt(rd.generationCount || '1', 10) || 1);
+    const previewImage = rd.imageData || '';
 
     return `
         <div class="node-field"><label>API 配置</label><select id="${id}-apiconfig">${opts}</select></div>
@@ -273,6 +274,15 @@ function renderImageGenerateBody(id, restoreData, models, providers) {
         </div>
         <div class="node-field node-field-expand"><label>提示词</label>
             <textarea id="${id}-prompt" placeholder="描述你想生成的图片..." rows="3"${getTextareaHeightStyle(rd, 'prompt')}>${rd.prompt || ''}</textarea></div>
+        <div class="node-field node-field-expand">
+            <label>生成结果</label>
+            <div class="preview-container image-generate-preview-container" id="${id}-preview">
+                ${previewImage
+                    ? `<img src="${previewImage}" alt="生成结果" style="cursor:pointer" draggable="false" />`
+                    : `<div class="preview-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>运行后显示生成图片</div>`}
+            </div>
+            <div class="image-generation-progress hidden" id="${id}-generation-progress" aria-live="polite"></div>
+        </div>
         <div class="node-error-msg" id="${id}-error"></div>
     `;
 }

@@ -995,15 +995,21 @@ export function createMediaControllerApi({
 
     function setupImagePreview(id, el) {
         const previewContainer = el.querySelector(`#${id}-preview`);
-        el.querySelector(`#${id}-zoom-in`).addEventListener('click', (e) => {
+        const zoomInBtn = el.querySelector(`#${id}-zoom-in`);
+        const zoomOutBtn = el.querySelector(`#${id}-zoom-out`);
+        const zoomResetBtn = el.querySelector(`#${id}-zoom-reset`);
+        const fullscreenBtn = el.querySelector(`#${id}-fullscreen`);
+        if (!previewContainer) return;
+
+        zoomInBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
             adjustPreviewZoom(id, 1.25);
         });
-        el.querySelector(`#${id}-zoom-out`).addEventListener('click', (e) => {
+        zoomOutBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
             adjustPreviewZoom(id, 0.8);
         });
-        el.querySelector(`#${id}-zoom-reset`).addEventListener('click', (e) => {
+        zoomResetBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
             const node = getNodeById(id);
             if (node) node.previewZoom = 1;
@@ -1016,7 +1022,7 @@ export function createMediaControllerApi({
             const img = previewContainer.querySelector('img');
             if (img) openFullscreenPreview(img.src, id);
         });
-        el.querySelector(`#${id}-fullscreen`).addEventListener('click', (e) => {
+        fullscreenBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
             const img = previewContainer.querySelector('img');
             if (img) openFullscreenPreview(img.src, id);

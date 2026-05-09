@@ -103,6 +103,7 @@ export function createNodeDomBindingsApi({
             };
 
             if (state.connecting) {
+                state.connecting.lastAttemptedTarget = `${tgt.nodeId}:${tgt.port}:${tgt.dir}`;
                 if (finishConnection(state.connecting, tgt)) {
                     state.connecting = null;
                     tempConnection.setAttribute('d', '');
@@ -144,6 +145,12 @@ export function createNodeDomBindingsApi({
                 type: portEl.dataset.type,
                 dir: portEl.dataset.direction
             };
+            const attemptedTarget = `${tgt.nodeId}:${tgt.port}:${tgt.dir}`;
+
+            if (src.lastAttemptedTarget === attemptedTarget) {
+                delete src.lastAttemptedTarget;
+                return;
+            }
 
             if (src.nodeId !== tgt.nodeId || src.portName !== tgt.port) {
                 if (finishConnection(src, tgt)) {
@@ -909,6 +916,7 @@ export function createNodeDomBindingsApi({
 
         if (type === 'ImageImport') setupImageImport(id, el);
         else if (type === 'ImageGenerate') {
+            setupImagePreview(id, el);
             syncImageGenerateResolutionOptions(id);
             const modelSelect = el.querySelector(`#${id}-apiconfig`);
             modelSelect?.addEventListener('change', () => {

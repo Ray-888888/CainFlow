@@ -1503,6 +1503,29 @@ body {
     opacity: 0.4;
 }
 
+.image-generate-preview-container {
+    min-height: 180px;
+}
+
+.image-generate-progress-placeholder {
+    display: flex;
+    min-height: 180px;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 20px 18px;
+    line-height: 1.5;
+}
+
+.image-generation-progress {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-dim);
+}
+
 /* Preview Controls */
 .preview-controls {
     display: flex;
@@ -4458,11 +4481,16 @@ input[type=number] {
 }
 
 /* ===== Update Notification & Modals ===== */
+#modal-update {
+    box-sizing: border-box;
+    padding: clamp(20px, 4vw, 40px);
+}
+
 .update-modal-panel {
-    width: 500px;
-    max-width: 500px;
+    width: 60%;
+    max-width: 100%;
     height: auto;
-    max-height: min(92vh, 760px);
+    max-height: 100%;
     background: var(--bg-modal);
     border: 1px solid var(--accent-purple);
     border-radius: var(--radius-node);
@@ -4507,7 +4535,7 @@ input[type=number] {
 }
 
 .update-changelog-body {
-    font-size: 14px;
+    font-size: 20px;
     line-height: 1.5;
     color: var(--text-secondary);
 }

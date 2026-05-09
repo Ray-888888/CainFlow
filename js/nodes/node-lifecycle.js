@@ -579,7 +579,7 @@ export function createNodeLifecycleApi({
         }, true);
         bindNodeSizeObserver(nodeData);
 
-        if (normalizedType === 'ImageImport' || normalizedType === 'ImagePreview' || normalizedType === 'ImageSave' || normalizedType === 'ImageResize' || normalizedType === 'ImageCompare') {
+        if (normalizedType === 'ImageImport' || normalizedType === 'ImagePreview' || normalizedType === 'ImageSave' || normalizedType === 'ImageResize' || normalizedType === 'ImageCompare' || normalizedType === 'ImageGenerate') {
             (async () => {
                 const isImportUrlMode = normalizedType === 'ImageImport' && nodeData.importMode === 'url';
                 const hasInitialData = !!(effectiveRestoreData && effectiveRestoreData.imageData);
@@ -615,7 +615,7 @@ export function createNodeLifecycleApi({
                         }
                         showResolutionBadge(id, data);
                         onConnectionsChanged();
-                    } else if (normalizedType === 'ImagePreview') {
+                    } else if (normalizedType === 'ImagePreview' || normalizedType === 'ImageGenerate') {
                         const previewContainer = el.querySelector(`#${id}-preview`);
                         if (previewContainer) {
                             previewContainer.innerHTML = `<img src="${data}" alt="预览" draggable="false" style="pointer-events: none;" />`;
