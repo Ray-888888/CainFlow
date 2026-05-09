@@ -33,7 +33,8 @@ export function createClipboardControllerApi({
             x: node.x,
             y: node.y,
             width: node.width || null,
-            height: node.height || null
+            height: node.height || null,
+            userResized: node.userResized === true
         };
         const textareaHeights = getNodeTextareaHeights(id);
         if (textareaHeights) serialized.textareaHeights = textareaHeights;

@@ -24,6 +24,7 @@ export function createNodeSerializer({ state, documentRef }) {
                 y: node.y,
                 width: node.width || null,
                 height: node.height || null,
+                userResized: node.userResized === true,
                 enabled: node.enabled,
                 lastDuration: node.lastDuration || null
             };

@@ -9,7 +9,7 @@ export const imageSaveNode = {
     inputs: [{ name: 'image', type: 'image', label: '图片输入' }],
     outputs: [{ name: 'image', type: 'image', label: '图片输出' }],
     defaultWidth: 240,
-    defaultHeight: 300
+    defaultHeight: 340
 };
 /**
  * 定义图片保存节点的元数据、端口和默认尺寸。

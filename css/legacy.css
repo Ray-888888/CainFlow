@@ -3331,6 +3331,7 @@ input[type=number] {
     font-size: 11px;
     line-height: 1.4;
     user-select: none;
+    margin-bottom: 8px;
 }
 
 .node-text-split .node-body {

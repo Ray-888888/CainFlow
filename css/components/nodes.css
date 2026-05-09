@@ -47,7 +47,17 @@
 }
 
 .image-compare-controls {
-    margin-top: 6px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.node-image-compare .image-compare-controls {
+    position: static;
+    top: auto;
+    right: auto;
+    z-index: auto;
+    justify-content: flex-start;
+    margin-bottom: 0;
 }
 
 .image-compare-divider {

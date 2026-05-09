@@ -234,6 +234,20 @@ export function createNodeDomBindingsApi({
         if (refreshPorts) {
             refreshTextSplitOutputPorts(id, Math.max(1, parts.length));
         }
+
+        const requestFrame = documentRef.defaultView?.requestAnimationFrame;
+        const scheduleFit = () => {
+            if (state.resizing?.nodeId === id) return;
+            fitNodeToContent(id);
+        };
+        if (typeof requestFrame === 'function') {
+            requestFrame(() => {
+                scheduleFit();
+                documentRef.defaultView?.setTimeout(scheduleFit, 80);
+            });
+        } else {
+            scheduleFit();
+        }
     }
 
     function getRememberedNodeDefault(type) {
@@ -313,7 +327,7 @@ export function createNodeDomBindingsApi({
             frameId = requestAnimationFrame(() => {
                 frameId = null;
                 if (state.resizing?.nodeId === nodeId) return;
-                fitNodeToContent(nodeId, { allowShrink: true, reason: 'element-resize' });
+                fitNodeToContent(nodeId, { reason: 'element-resize' });
             });
         };
 
@@ -620,6 +634,18 @@ export function createNodeDomBindingsApi({
         return Math.ceil(paddingX + leftWidth + rightWidth + headerGap);
     }
 
+    function getHeaderMeasuredHeight(header) {
+        if (!header) return 0;
+        const style = getComputedStyle(header);
+        return Math.ceil(
+            Math.max(
+                getPx(style, 'min-height'),
+                header.offsetHeight || 0,
+                header.scrollHeight || 0
+            )
+        );
+    }
+
     function getNodeMinimumSize(el, headerFallbackWidth) {
         const header = el.querySelector('.node-header');
         const body = el.querySelector('.node-body');
@@ -627,7 +653,7 @@ export function createNodeDomBindingsApi({
         const bodyPaddingX = bodyStyle ? getPx(bodyStyle, 'padding-left') + getPx(bodyStyle, 'padding-right') : 0;
         const bodyPaddingY = bodyStyle ? getPx(bodyStyle, 'padding-top') + getPx(bodyStyle, 'padding-bottom') : 0;
         const headerWidth = getHeaderMinimumWidth(header, headerFallbackWidth);
-        const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+        const headerHeight = getHeaderMeasuredHeight(header);
         const isCompactTextNode = el.classList.contains('node-text');
         const baseMinWidth = isCompactTextNode ? 120 : 180;
         const baseMinHeight = isCompactTextNode ? 88 : 120;

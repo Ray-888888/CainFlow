@@ -307,6 +307,18 @@ export function createNodeLifecycleApi({
         return Math.ceil(Math.max(fallbackWidth, paddingX + leftSize.width + rightSize.width + gap));
     }
 
+    function getHeaderMeasuredHeight(header) {
+        if (!header) return 0;
+        const style = getComputedStyle(header);
+        return Math.ceil(
+            Math.max(
+                getPx(style, 'min-height'),
+                header.offsetHeight || 0,
+                header.scrollHeight || 0
+            )
+        );
+    }
+
     function getMeasuredNodeMinimumSize(el, config = null) {
         if (!el) {
             return {
@@ -332,7 +344,7 @@ export function createNodeLifecycleApi({
         }
 
         const headerWidth = getHeaderMinimumWidth(header, getDefaultNodeWidth(config));
-        const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+        const headerHeight = getHeaderMeasuredHeight(header);
         const bodySize = body ? getElementMinimumSize(body) : { width: 0, height: 0 };
 
         el.style.height = originalElHeight;
@@ -399,8 +411,14 @@ export function createNodeLifecycleApi({
         const currentWidth = node.el.offsetWidth || Number(node.width) || minimum.minWidth;
         const currentHeight = node.el.offsetHeight || Number(node.height) || minimum.minHeight;
         const shouldShrink = allowShrink && reason === 'element-resize';
-        const nextWidth = shouldShrink ? minimum.minWidth : Math.max(currentWidth, minimum.minWidth);
-        const nextHeight = shouldShrink ? minimum.minHeight : Math.max(currentHeight, minimum.minHeight);
+        const respectsUserWidth = node.userResized === true && currentWidth >= minimum.minWidth;
+        const respectsUserHeight = node.userResized === true && currentHeight >= minimum.minHeight;
+        const nextWidth = shouldShrink
+            ? minimum.minWidth
+            : (respectsUserWidth ? currentWidth : Math.max(currentWidth, minimum.minWidth));
+        const nextHeight = shouldShrink
+            ? minimum.minHeight
+            : (respectsUserHeight ? currentHeight : Math.max(currentHeight, minimum.minHeight));
         applyNodeSize(node, nextWidth, nextHeight, options);
     }
 
@@ -515,7 +533,7 @@ export function createNodeLifecycleApi({
             height: initialHeight,
             defaultWidth: getDefaultNodeWidth(config),
             defaultHeight: getDefaultNodeHeight(config),
-            userResized: Boolean(effectiveRestoreData?.width || effectiveRestoreData?.height),
+            userResized: effectiveRestoreData?.userResized === true,
             maxHeight: config.maxHeight || null,
             dirHandle: null,
             enabled: effectiveRestoreData?.enabled !== false,
