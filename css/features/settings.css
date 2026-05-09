@@ -287,10 +287,262 @@
     accent-color: var(--accent-purple);
 }
 
+.settings-toggle-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-toggle-text {
+    line-height: 1.4;
+}
+
+.provider-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 2px;
+}
+
+.provider-toggle-label {
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+#settings-modal .toggle-switch {
+    width: 42px;
+    height: 24px;
+}
+
+#settings-modal .toggle-slider {
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+#settings-modal .toggle-slider::before {
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    top: 3px;
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+#settings-modal .toggle-switch input:checked + .toggle-slider {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.92), rgba(99, 102, 241, 0.92));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+#settings-modal .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+    background: #ffffff;
+}
+
+#settings-modal .toggle-switch input:focus-visible + .toggle-slider {
+    outline: 2px solid rgba(99, 102, 241, 0.42);
+    outline-offset: 2px;
+}
+
+#general-settings {
+    width: 100%;
+}
+
+#general-settings .general-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+    align-items: stretch;
+}
+
+#general-settings .general-settings-card {
+    min-width: 0;
+    margin-top: 0;
+    gap: 14px;
+    padding: 18px;
+    height: 100%;
+    justify-content: flex-start;
+}
+
+#general-settings .general-settings-card .card-header span {
+    font-size: 17px !important;
+    line-height: 1.3;
+}
+
+#general-settings .general-settings-card .card-row {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 16px;
+}
+
+#general-settings .general-settings-card .card-field {
+    gap: 8px;
+    min-width: 0;
+}
+
+#general-settings .general-settings-card .card-field label {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+#general-settings .general-settings-card .card-field p {
+    margin: 0;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+}
+
+#general-settings .general-settings-card input,
+#general-settings .general-settings-card select,
+#general-settings .general-settings-card button,
+#general-settings .general-settings-card span,
+#general-settings .general-settings-card strong,
+#general-settings .general-settings-card .update-status-indicator {
+    font-size: 14px;
+}
+
+#general-settings .general-settings-card input,
+#general-settings .general-settings-card select {
+    min-height: 40px;
+    padding: 9px 12px;
+}
+
+#general-settings .general-settings-inline-input,
+#general-settings .general-settings-dir-row,
+#general-settings .general-settings-volume-row {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#general-settings .general-settings-inline-input > *,
+#general-settings .general-settings-dir-row > *,
+#general-settings .general-settings-volume-row > * {
+    min-width: 0;
+}
+
+#general-settings #global-dir-badge {
+    max-width: none !important;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    white-space: normal !important;
+    overflow: hidden;
+    text-overflow: initial;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+}
+
+#general-settings .general-settings-dir-row {
+    align-items: stretch !important;
+    flex-wrap: wrap;
+}
+
+#general-settings .general-settings-dir-row .btn {
+    min-height: 40px;
+    flex-shrink: 0;
+}
+
+#general-settings .retry-input-group {
+    min-height: 40px;
+}
+
+#general-settings .retry-input-group .btn-retry-step {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 18px !important;
+}
+
+#general-settings #setting-max-retries {
+    height: 38px !important;
+    font-size: 14px !important;
+}
+
+#general-settings .general-settings-volume-row {
+    align-items: center !important;
+    flex-wrap: wrap;
+}
+
+#general-settings #volume-hint {
+    min-width: 48px !important;
+    text-align: right;
+}
+
+#general-settings .general-settings-status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#general-settings .general-settings-update-header {
+    gap: 12px;
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+}
+
+#general-settings .general-settings-update-actions {
+    margin-top: 4px;
+}
+
+#general-settings .general-settings-update-actions .btn {
+    min-height: 40px;
+}
+
+#general-settings .version-badge {
+    font-size: 15px;
+    padding: 5px 10px;
+}
+
+#general-settings .update-version-summary {
+    gap: 8px 12px;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+#general-settings .update-version-summary strong {
+    font-size: 14px;
+}
+
+#general-settings .notification-volume-slider {
+    min-width: 160px;
+}
+
+@media (max-width: 900px) {
+    #general-settings .general-settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 html[data-app-theme="light"] .card-btn-fetch-models {
     background: rgba(15, 118, 110, 0.1);
     border-color: rgba(15, 118, 110, 0.2);
     color: #0f766e;
+}
+
+html[data-app-theme="light"] #settings-modal .toggle-slider {
+    background: rgba(203, 213, 225, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.32);
+}
+
+html[data-app-theme="light"] #settings-modal .toggle-slider::before {
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(148, 163, 184, 0.28);
+}
+
+html[data-app-theme="light"] #settings-modal .toggle-switch input:checked + .toggle-slider {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(14, 165, 233, 0.92));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+html[data-app-theme="light"] #settings-modal .provider-toggle-label {
+    color: #64748b;
 }
 
 html[data-app-theme="light"] .card-btn-fetch-models:hover {

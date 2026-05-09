@@ -54,6 +54,47 @@ export function createSettingsControllerApi({
     };
     let openModelProviderPanelId = '';
 
+    function getEndpointHost(endpoint) {
+        const raw = String(endpoint || '').trim();
+        if (!raw) return '';
+        try {
+            const url = new URL(raw.includes('://') ? raw : `https://${raw}`);
+            return String(url.hostname || '').trim().toLowerCase().replace(/\.$/, '');
+        } catch {
+            return '';
+        }
+    }
+
+    async function ensureAllowedHostForProvider(provider, options = {}) {
+        const host = getEndpointHost(provider?.endpoint);
+        if (!host) return false;
+        try {
+            const response = await fetchImpl('/api/allowed_hosts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add', host })
+            });
+            if (response.ok || response.status === 400) return true;
+            if (!options.silent) {
+                const text = await response.text();
+                showToast(`允许域名同步失败: ${text || response.status}`, 'warning');
+            }
+        } catch (error) {
+            if (!options.silent) showToast(`允许域名同步异常: ${error?.message || error}`, 'warning');
+        }
+        return false;
+    }
+
+    function syncAllowedHostsForProviders(providers = state.providers, options = {}) {
+        const seen = new Set();
+        return Promise.all((providers || []).map((provider) => {
+            const host = getEndpointHost(provider?.endpoint);
+            if (!host || seen.has(host)) return Promise.resolve(false);
+            seen.add(host);
+            return ensureAllowedHostForProvider(provider, options);
+        }));
+    }
+
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -555,6 +596,8 @@ export function createSettingsControllerApi({
             if (!url) throw new Error('请先填写供应商 API 地址');
             if (!provider.apikey && protocol === 'google') throw new Error('请先填写供应商 API 密钥');
 
+            await ensureAllowedHostForProvider(provider);
+
             const headers = protocol === 'openai' && provider.apikey
                 ? getProxyHeaders(url, 'GET', {
                     Accept: 'application/json',
@@ -627,11 +670,14 @@ export function createSettingsControllerApi({
                         </div>
                         <div class="card-field"><label>API 地址</label><input type="text" value="${prov.endpoint}" placeholder="Endpoint URL" data-id="${prov.id}" data-field="endpoint" /></div>
                     </div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px;">
+                    <div class="provider-toggle-row">
                         <div class="endpoint-preview" id="ep-preview-${prov.id}" style="font-size:12px;color:var(--text-dim);word-break:break-all;line-height:1.4;opacity:0.75;flex:1;">连接说明：${getProviderEndpointPreview(prov.endpoint, prov.autoComplete, normalizeProviderType(prov.type, prov))}</div>
-                        <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim);cursor:pointer;white-space:nowrap;flex-shrink:0;">
-                            <input type="checkbox" ${prov.autoComplete !== false ? 'checked' : ''} data-id="${prov.id}" data-field="autoComplete" style="accent-color:var(--accent-purple);cursor:pointer;" />
-                            自动补全
+                        <label class="settings-toggle-row provider-toggle-label">
+                            <span class="settings-toggle-text">自动补全</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" ${prov.autoComplete !== false ? 'checked' : ''} data-id="${prov.id}" data-field="autoComplete" />
+                                <span class="toggle-slider"></span>
+                            </span>
                         </label>
                     </div>
                 </div>
@@ -672,6 +718,7 @@ export function createSettingsControllerApi({
                 }
 
                 saveState();
+                if (field === 'endpoint') ensureAllowedHostForProvider(prov);
                 renderModels();
                 updatePreview(id);
             });
@@ -938,6 +985,7 @@ export function createSettingsControllerApi({
         const autoResizeEnabled = state.imageAutoResizeEnabled !== false;
         const connectionLineType = state.connectionLineType || 'bezier';
         const globalAnimationEnabled = state.globalAnimationEnabled !== false;
+        const allowPrivateNetworkTargets = state.allowPrivateNetworkTargets === true;
         const updateStatus = localStorageRef.getItem('cainflow_update_status') || 'unknown';
         const lastCheck = localStorageRef.getItem('cainflow_last_update_check');
         const latestVer = localStorageRef.getItem('cainflow_update_version') || '';
@@ -957,16 +1005,16 @@ export function createSettingsControllerApi({
         else if (updateStatus === 'latest') statusHtml = `<span class="update-status-latest">✓ 当前已是最新版本</span>`;
         else if (updateStatus === 'new_version') {
             statusHtml = `
-                <div style="display:flex; align-items:center; gap:10px;">
+                <div class="general-settings-status-row">
                     <span class="update-status-new">发现新版本 ${latestVer}</span>
-                    <button id="btn-goto-download" class="btn btn-secondary btn-sm" style="animation: glow-pulse 2.5s infinite">前往下载</button>
+                    <button class="btn btn-secondary btn-sm" data-action="goto-download" style="animation: glow-pulse 2.5s infinite">前往下载</button>
                 </div>
             `;
         } else if (updateStatus === 'error') statusHtml = `<span class="update-status-error" title="${escapeHtml(updateError)}">✗ ${escapeHtml(updateError)}</span>`;
 
         list.innerHTML = `
-        <div style="display: flex; gap: 16px; align-items: stretch; margin-bottom: 16px;">
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+        <div class="general-settings-grid">
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">图片处理设置</span>
                 </div>
@@ -983,7 +1031,7 @@ export function createSettingsControllerApi({
                     </div>
                     <div class="card-field">
                         <label>图片导入自适应缩放阈值 (边长)</label>
-                        <div style="display:flex; align-items:center; gap:8px; opacity:${autoResizeEnabled ? '1' : '0.55'};">
+                        <div class="general-settings-inline-input" style="display:flex; align-items:center; gap:8px; opacity:${autoResizeEnabled ? '1' : '0.55'};">
                             <input type="number" id="setting-max-side" value="${currentSide}" placeholder="如: 2048" style="flex:1" ${autoResizeEnabled ? '' : 'disabled'} />
                             <span id="pixels-hint" style="font-size:11px; color:var(--text-dim); min-width:60px;">${(state.imageMaxPixels / 1000000).toFixed(1)} MP</span>
                         </div>
@@ -992,14 +1040,14 @@ export function createSettingsControllerApi({
                 </div>
             </div>
 
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">存储设置</span>
                 </div>
                 <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
                     <div class="card-field">
                         <label>全局图片保存目录</label>
-                        <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="general-settings-dir-row" style="display:flex; align-items:center; gap:8px;">
                             <span id="global-dir-badge" style="font-size:12px; color:var(--text-primary); padding:6px 10px; border-radius:6px; flex:1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; ${state.globalSaveDirHandle ? 'background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);' : 'background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.2);'}">
                                 ${state.globalSaveDirHandle ? `已选择: ${state.globalSaveDirHandle.name}` : '<span style="color:var(--accent-red); font-weight:500;">⚠️ 未设置</span>'}
                             </span>
@@ -1013,14 +1061,14 @@ export function createSettingsControllerApi({
                 </div>
             </div>
 
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">自动化与重试</span>
                 </div>
                 <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px;">
                     <div class="card-field">
                         <label>最大自动重试次数</label>
-                        <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="general-settings-inline-input" style="display:flex; align-items:center; gap:8px;">
                             <div class="retry-input-group" style="display:flex; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:6px; overflow:hidden; flex:1;">
                                 <button class="btn-retry-step" data-step="-1" style="background:transparent; border:none; color:var(--text-secondary); width:32px; height:32px; cursor:pointer; font-size:16px; transition:all 0.2s; display:flex; align-items:center; justify-content:center;">-</button>
                                 <input type="number" id="setting-max-retries" value="${state.maxRetries || 15}" min="1" max="100" style="flex:1; background:transparent; border:none; border-left:1px solid rgba(255,255,255,0.05); border-right:1px solid rgba(255,255,255,0.05); text-align:center; padding:0; height:32px; color:var(--accent-purple); font-weight:600; -moz-appearance: textfield;" />
@@ -1033,12 +1081,12 @@ export function createSettingsControllerApi({
                     <div class="card-field">
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
                             <label style="margin:0;">请求超时设置</label>
-                            <label class="switch">
+                            <label class="toggle-switch">
                                 <input type="checkbox" id="setting-timeout-enabled" ${state.requestTimeoutEnabled ? 'checked' : ''}>
-                                <span class="slider"></span>
+                                <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div style="display:flex; align-items:center; gap:8px; opacity:${state.requestTimeoutEnabled ? '1' : '0.55'};">
+                        <div class="general-settings-inline-input" style="display:flex; align-items:center; gap:8px; opacity:${state.requestTimeoutEnabled ? '1' : '0.55'};">
                             <input type="number" id="setting-timeout-seconds" value="${state.requestTimeoutSeconds || 60}" min="1" step="1" ${state.requestTimeoutEnabled ? '' : 'disabled'} style="flex:1" />
                             <span style="font-size:11px; color:var(--text-dim); min-width:20px;">秒</span>
                         </div>
@@ -1046,10 +1094,7 @@ export function createSettingsControllerApi({
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div style="display: flex; gap: 16px; align-items: stretch;">
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">画布连线</span>
                 </div>
@@ -1074,14 +1119,31 @@ export function createSettingsControllerApi({
                     </div>
                 </div>
             </div>
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">安全</span>
+                </div>
+                <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="card-field">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+                            <label style="margin:0;">允许内网 / 本地 API 地址</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="setting-allow-private-network-targets" ${allowPrivateNetworkTargets ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size:11px; color:var(--accent-orange); line-height: 1.4;">默认关闭。开启后，代理将不再限制你填写的 API 地址，可用于本地模型、局域网网关或公司内网服务；同时也会显著降低 SSRF 防护强度。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">通知设置</span>
                 </div>
                 <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
                     <div class="card-field">
                         <label>完成音效音量</label>
-                        <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="general-settings-volume-row" style="display:flex; align-items:center; gap:12px;">
                             <input type="range" id="setting-notify-volume" class="notification-volume-slider" min="0" max="1" step="0.05" value="${state.notificationVolume}" style="flex:1" />
                             <span id="volume-hint" style="font-size:12px; color:var(--text-dim); min-width:40px;">${Math.round(state.notificationVolume * 100)}%</span>
                             <button id="btn-test-sound" class="btn btn-ghost" style="padding:4px 8px; font-size:11px;">测试音效</button>
@@ -1090,7 +1152,7 @@ export function createSettingsControllerApi({
                 </div>
             </div>
 
-            <div class="api-config-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+            <div class="api-config-card general-settings-card general-settings-card--update" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">系统版本与更新</span>
                 </div>
@@ -1098,7 +1160,7 @@ export function createSettingsControllerApi({
                     <div class="card-field">
                         <label>当前版本与检查结果</label>
                         <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                            <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                            <div class="general-settings-update-header" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
                                 <span class="version-badge">${appVersion}</span>
                                 <div class="update-status-indicator">${statusHtml}</div>
                             </div>
@@ -1108,8 +1170,8 @@ export function createSettingsControllerApi({
                                 <span>服务端版本</span>
                                 <strong>${serverVersionText}</strong>
                             </div>
-                            <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-                                <button id="btn-goto-download" class="btn btn-secondary" style="width:100%; ${updateStatus === 'new_version' ? 'animation: glow-pulse 2.5s infinite;' : ''}">前往下载</button>
+                            <div class="general-settings-update-actions" style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                                <button class="btn btn-secondary" data-action="goto-download" style="width:100%; ${updateStatus === 'new_version' ? 'animation: glow-pulse 2.5s infinite;' : ''}">前往下载</button>
                                 <button id="btn-check-update" class="btn btn-secondary" style="width:100%;">检查更新</button>
                             </div>
                         </div>
@@ -1127,9 +1189,10 @@ export function createSettingsControllerApi({
         const volHint = documentRef.getElementById('volume-hint');
         const testBtn = documentRef.getElementById('btn-test-sound');
         const btnCheckUpdate = documentRef.getElementById('btn-check-update');
-        const btnGotoDownload = documentRef.getElementById('btn-goto-download');
+        const btnGotoDownloadList = Array.from(documentRef.querySelectorAll('[data-action="goto-download"]'));
         const timeoutEnabledInput = documentRef.getElementById('setting-timeout-enabled');
         const timeoutSecondsInput = documentRef.getElementById('setting-timeout-seconds');
+        const allowPrivateNetworkTargetsInput = documentRef.getElementById('setting-allow-private-network-targets');
         const connectionLineTypeInput = documentRef.getElementById('setting-connection-line-type');
         const globalAnimationInput = documentRef.getElementById('setting-global-animation-enabled');
         const btnSetGlobal = documentRef.getElementById('btn-set-global-dir');
@@ -1144,8 +1207,10 @@ export function createSettingsControllerApi({
         };
         updateVolumeSliderProgress();
 
-        btnGotoDownload?.addEventListener('click', () => {
-            windowRef.open(`https://github.com/${githubRepo}/releases/latest`, '_blank');
+        btnGotoDownloadList.forEach((button) => {
+            button.addEventListener('click', () => {
+                windowRef.open(`https://github.com/${githubRepo}/releases/latest`, '_blank');
+            });
         });
 
         btnSetGlobal?.addEventListener('click', async () => {
@@ -1218,6 +1283,11 @@ export function createSettingsControllerApi({
             } else {
                 e.target.value = state.requestTimeoutSeconds;
             }
+        });
+
+        allowPrivateNetworkTargetsInput?.addEventListener('change', (e) => {
+            state.allowPrivateNetworkTargets = e.target.checked;
+            saveState();
         });
 
         connectionLineTypeInput?.addEventListener('change', (e) => {
@@ -1468,6 +1538,7 @@ export function createSettingsControllerApi({
             renderProviders();
             renderModels();
             saveState();
+            ensureAllowedHostForProvider(state.providers.find((provider) => provider.id === newProviderId), { silent: true });
         });
 
         documentRef.getElementById('btn-add-model').addEventListener('click', () => {
@@ -1503,6 +1574,7 @@ export function createSettingsControllerApi({
         updateImageSaveWarnings,
         updateAllNodeModelDropdowns,
         updateCacheUsage,
-        initSettingsUI
+        initSettingsUI,
+        syncAllowedHostsForProviders
     };
 }

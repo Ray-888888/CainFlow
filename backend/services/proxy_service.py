@@ -69,8 +69,13 @@ def handle_proxy_request(handler):
     if not target_url:
         write_error(handler, 400, 'Missing x-target-url header')
         return
-    if not is_safe_url(target_url):
-        write_error(handler, 403, 'Forbidden: Target URL is not allowed')
+    allow_private_network_targets = handler.headers.get('x-allow-private-network-targets', '').lower() == 'true'
+    if not is_safe_url(target_url, allow_private_network_targets=allow_private_network_targets):
+        write_error(
+            handler,
+            403,
+            '安全过滤已阻止访问该目标地址。当前仅允许访问已授权的公网 API 地址；如需访问内网、本地或未加入允许列表的地址，请前往“设置 > 通用设置 > 安全”，开启“允许内网 / 本地 API 地址”。'
+        )
         return
 
     body = read_request_body(handler, default=None)
@@ -78,12 +83,12 @@ def handle_proxy_request(handler):
     req_headers = {}
     for key, value in handler.headers.items():
         lowered = key.lower()
-        if lowered not in ['host', 'x-target-url', 'x-target-url-b64', 'x-target-method', 'content-length', 'connection', 'origin', 'referer', 'accept-encoding']:
+        if lowered not in ['host', 'x-target-url', 'x-target-url-b64', 'x-target-method', 'x-allow-private-network-targets', 'content-length', 'connection', 'origin', 'referer', 'accept-encoding']:
             req_headers[key] = value
 
     req_headers['Connection'] = 'keep-alive'
     if 'user-agent' not in [header.lower() for header in req_headers.keys()]:
-        req_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.7.8'
+        req_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.7.8.1'
 
     context = ssl.create_default_context()
     context.check_hostname = False

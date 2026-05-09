@@ -122,6 +122,7 @@ export function createNodeSerializer({ state, documentRef }) {
             globalAnimationEnabled: state.globalAnimationEnabled,
             connectionFlowAnimationEnabled: state.globalAnimationEnabled,
             proxy: state.proxy,
+            allowPrivateNetworkTargets: state.allowPrivateNetworkTargets,
             requestTimeoutEnabled: state.requestTimeoutEnabled,
             requestTimeoutSeconds: state.requestTimeoutSeconds,
             historyGridCols: state.historyGridCols

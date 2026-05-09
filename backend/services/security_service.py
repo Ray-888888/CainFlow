@@ -9,6 +9,59 @@ from urllib.parse import urlparse
 
 from backend import config, state
 
+DEFAULT_ALLOWED_HOSTS = {
+    '6789api.top',
+    'www.6789api.top',
+    'api.github.com',
+    'github.com',
+}
+
+BLOCKED_HOSTNAMES = {
+    'localhost',
+    'localhost.localdomain',
+}
+
+
+def _normalize_hostname(value):
+    raw = str(value or '').strip().lower().rstrip('.')
+    if not raw:
+        return ''
+
+    parsed = urlparse(raw if '://' in raw else f'//{raw}')
+    host = parsed.hostname or raw.split('/', 1)[0].split('?', 1)[0].split('#', 1)[0]
+    host = host.strip().lower().rstrip('.')
+    if not host:
+        return ''
+
+    try:
+        return host.encode('idna').decode('ascii')
+    except UnicodeError:
+        return ''
+
+
+def _get_allowed_hosts():
+    hosts = set(DEFAULT_ALLOWED_HOSTS)
+    for host in state.CUSTOM_ALLOWED_HOSTS:
+        normalized = _normalize_hostname(host)
+        if normalized:
+            hosts.add(normalized)
+    return hosts
+
+
+def _is_blocked_ip(ip):
+    return (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _host_matches_allowed_domain(host, allowed_host):
+    return host == allowed_host or host.endswith(f'.{allowed_host}')
+
 
 def load_allowed_hosts():
     if os.path.exists(config.ALLOWED_HOSTS_FILE):
@@ -55,19 +108,27 @@ def check_proxy_health(ip, port):
         return False, str(exc)
 
 
-def is_safe_url(url):
+def is_safe_url(url, allow_private_network_targets=False):
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ('http', 'https'):
             return False
-        host = parsed.hostname
+        host = _normalize_hostname(parsed.hostname)
         if not host:
             return False
+        if allow_private_network_targets:
+            return True
+        if host in BLOCKED_HOSTNAMES:
+            return False
+
+        allowed_hosts = _get_allowed_hosts()
         try:
-            ipaddress.ip_address(host)
-            return True
+            ip = ipaddress.ip_address(host)
+            if _is_blocked_ip(ip):
+                return False
+            return host in allowed_hosts
         except ValueError:
-            return True
+            return any(_host_matches_allowed_domain(host, allowed_host) for allowed_host in allowed_hosts)
     except Exception:
         return False
 

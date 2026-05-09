@@ -1,3 +1,5 @@
+import { formatProxyErrorMessage } from '../../services/api-client.js';
+
 /**
  * 管理版本更新检查、刷新提示与更新前备份导出等流程。
  */
@@ -254,7 +256,9 @@ export function createUpdateManager({
             timeoutId = null;
 
             if (!response.ok) {
-                const msg = getUpdateFailureMessage(null, response);
+                const responseText = await response.text();
+                const friendlyMessage = formatProxyErrorMessage(response.status, responseText, '检查更新失败', { url });
+                const msg = friendlyMessage || getUpdateFailureMessage(null, response);
                 setUpdateError(msg);
                 showToast(msg, 'error', 6000);
                 renderGeneralSettings();

@@ -54,6 +54,7 @@ export function createUiControllerApi({
                 globalAnimationEnabled: state.globalAnimationEnabled,
                 connectionFlowAnimationEnabled: state.globalAnimationEnabled,
                 proxy: state.proxy ? { ...state.proxy } : null,
+                allowPrivateNetworkTargets: state.allowPrivateNetworkTargets,
                 requestTimeoutEnabled: state.requestTimeoutEnabled,
                 requestTimeoutSeconds: state.requestTimeoutSeconds,
                 historyGridCols: state.historyGridCols
@@ -178,6 +179,10 @@ export function createUiControllerApi({
                 : null;
         }
 
+        if (settings.allowPrivateNetworkTargets !== undefined) {
+            state.allowPrivateNetworkTargets = !!settings.allowPrivateNetworkTargets;
+        }
+
         if (settings.requestTimeoutEnabled !== undefined) {
             state.requestTimeoutEnabled = !!settings.requestTimeoutEnabled;
         }
@@ -198,6 +203,7 @@ export function createUiControllerApi({
         settingsControllerApi?.renderModels();
         settingsControllerApi?.renderGeneralSettings();
         settingsControllerApi?.syncProxyToServer();
+        settingsControllerApi?.syncAllowedHostsForProviders?.(state.providers, { silent: true });
         saveState();
     }
 
