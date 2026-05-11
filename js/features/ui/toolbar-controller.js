@@ -27,7 +27,7 @@ export function createToolbarControllerApi({
             documentRef.body.classList.remove('is-interacting');
             viewportApi.refreshNodeTextRendering();
             scheduleSave();
-        }, 300);
+        }, 120);
     }
 
     function zoomToFit(targetNodes = null) {

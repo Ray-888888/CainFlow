@@ -51,34 +51,18 @@ export function createExecutionCoreApi({
         });
     }
 
-    function renderImageGeneratePreviewState(nodeId, {
+function renderImageGeneratePreviewState(nodeId, {
         message = '',
         current = 0,
-        total = 1,
-        imageData = '',
-        showImage = false
+        total = 1
     } = {}) {
-        const previewContainer = documentRef.getElementById(`${nodeId}-preview`);
         const progressEl = documentRef.getElementById(`${nodeId}-generation-progress`);
-        if (!previewContainer || !progressEl) return;
+        if (!progressEl) return;
 
-        const hasMultiple = total > 1;
-        const progressText = hasMultiple && current > 0 ? `第 ${current}/${total} 张` : '';
-        const detailText = [message, progressText].filter(Boolean).join(' · ');
-
-        if (showImage && imageData) {
-            previewContainer.innerHTML = `<img src="${imageData}" alt="生成结果" style="cursor:pointer" draggable="false" />`;
-        } else {
-            previewContainer.innerHTML = `<div class="preview-placeholder image-generate-progress-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>${detailText || '准备生成图片'}</div>`;
-        }
-
-        if (detailText) {
-            progressEl.textContent = detailText;
-            progressEl.classList.remove('hidden');
-        } else {
-            progressEl.textContent = '';
-            progressEl.classList.add('hidden');
-        }
+        const safeTotal = Math.max(1, parseInt(total, 10) || 1);
+        const safeCurrent = Math.max(0, Math.min(safeTotal, parseInt(current, 10) || 0));
+        progressEl.textContent = `${safeCurrent}/${safeTotal}`;
+        progressEl.classList.remove('hidden');
 
         requestNodeFit(nodeId);
     }
@@ -648,7 +632,6 @@ export function createExecutionCoreApi({
                     Math.max(0, parseInt(node.generationCompletedCount || '0', 10) || 0)
                 );
                 renderImageGeneratePreviewState(id, {
-                    message: '准备生成图片',
                     current: Math.min(node.generationCompletedCount + 1, generationCount),
                     total: generationCount
                 });
@@ -656,7 +639,6 @@ export function createExecutionCoreApi({
                 while (node.generationCompletedCount < generationCount) {
                     const nextGenerationIndex = node.generationCompletedCount + 1;
                     renderImageGeneratePreviewState(id, {
-                        message: '正在生成图片',
                         current: nextGenerationIndex,
                         total: generationCount
                     });
@@ -738,11 +720,8 @@ export function createExecutionCoreApi({
                     node.imageData = imageData;
                     node.generationCompletedCount = nextGenerationIndex;
                     renderImageGeneratePreviewState(id, {
-                        message: generationCount > 1 ? '已生成最新结果' : '',
                         current: nextGenerationIndex,
-                        total: generationCount,
-                        imageData,
-                        showImage: true
+                        total: generationCount
                     });
                     await refreshDependentImageResizePreviews(id);
 
@@ -757,11 +736,8 @@ export function createExecutionCoreApi({
             } catch (err) {
                 if (isAbortLikeError(err, signal)) {
                     renderImageGeneratePreviewState(id, {
-                        message: '已停止生成',
                         current: Math.max(0, parseInt(node.generationCompletedCount || '0', 10) || 0),
-                        total: targetGenerationCount,
-                        imageData: node.data.image || node.imageData || '',
-                        showImage: !!(node.data.image || node.imageData)
+                        total: targetGenerationCount
                     });
                     if (errorEl) {
                         errorEl.innerHTML = '';
@@ -770,11 +746,8 @@ export function createExecutionCoreApi({
                     throw err;
                 }
                 renderImageGeneratePreviewState(id, {
-                    message: '生成失败',
                     current: Math.max(0, parseInt(node.generationCompletedCount || '0', 10) || 0),
-                    total: targetGenerationCount,
-                    imageData: node.data.image || node.imageData || '',
-                    showImage: !!(node.data.image || node.imageData)
+                    total: targetGenerationCount
                 });
                 if (errorEl) {
                     const completedCount = Math.max(0, parseInt(node.generationCompletedCount || '0', 10) || 0);

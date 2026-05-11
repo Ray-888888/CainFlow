@@ -28,6 +28,7 @@ export function createCanvasInteractionsApi({
     requestAnimationFrameRef = requestAnimationFrame
 }) {
     let rafUpdate = null;
+    const ZOOM_SETTLE_DELAY_MS = 120;
     const SHAKE_DETACH_DURATION_MS = 300;
     const SHAKE_SAMPLE_DISTANCE = 8;
     const SHAKE_RESET_MS = 520;
@@ -44,6 +45,38 @@ export function createCanvasInteractionsApi({
                 updateAllConnections();
             }
             rafUpdate = null;
+        });
+    }
+
+    function isNodeFormControlActive() {
+        const active = documentRef.activeElement;
+        if (!active || !active.closest) return false;
+        const isFormControl = ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.isContentEditable;
+        return isFormControl && !!active.closest('.node');
+    }
+
+    function finishZoomInteraction() {
+        if (state.zoomSettleControlLock) {
+            state.pendingZoomVisualRefresh = true;
+            return;
+        }
+
+        state.isInteracting = false;
+        canvasContainer.classList.remove('is-zooming');
+        documentRef.body.classList.remove('is-interacting');
+        documentRef.getElementById('connections-group').classList.remove('is-interacting');
+
+        if (isNodeFormControlActive()) {
+            state.pendingZoomVisualRefresh = true;
+            scheduleSave();
+            return;
+        }
+
+        state.pendingZoomVisualRefresh = false;
+        viewportApi.updateCanvasTransform();
+        requestAnimationFrameRef(() => {
+            viewportApi.refreshNodeTextRendering();
+            scheduleSave();
         });
     }
 
@@ -419,6 +452,7 @@ export function createCanvasInteractionsApi({
                 }
                 state.canvas.isPanning = false;
                 canvasContainer.classList.remove('grabbing');
+                viewportApi.updateCanvasTransform();
             }
             if (state.marquee) {
                 state.marquee.endX = e.clientX;
@@ -539,23 +573,16 @@ export function createCanvasInteractionsApi({
 
             clearTimeout(state.zoomTimer);
             state.zoomTimer = setTimeout(() => {
-                viewportApi.updateCanvasTransform();
+                if (state.zoomSettleBlockedUntil && Date.now() < state.zoomSettleBlockedUntil) {
+                    clearTimeout(state.zoomTimer);
+                    state.zoomTimer = setTimeout(() => {
+                        canvasContainer.dispatchEvent(new Event('wheel-zoom-settle'));
+                    }, Math.max(16, state.zoomSettleBlockedUntil - Date.now()));
+                    return;
+                }
 
-                requestAnimationFrameRef(() => {
-                    viewportApi.updateCanvasTransform();
-
-                    requestAnimationFrameRef(() => {
-                        state.isInteracting = false;
-                        canvasContainer.classList.remove('is-zooming');
-                        documentRef.body.classList.remove('is-interacting');
-                        documentRef.getElementById('connections-group').classList.remove('is-interacting');
-
-                        viewportApi.updateCanvasTransform();
-                        viewportApi.refreshNodeTextRendering();
-                        scheduleSave();
-                    });
-                });
-            }, 250);
+                finishZoomInteraction();
+            }, ZOOM_SETTLE_DELAY_MS);
 
             const rect = canvasContainer.getBoundingClientRect();
             const mx = e.clientX - rect.left;
@@ -573,6 +600,21 @@ export function createCanvasInteractionsApi({
                 });
             }
         }, { passive: false });
+
+        canvasContainer.addEventListener('wheel-zoom-settle', () => {
+            if (state.zoomTimer) {
+                clearTimeout(state.zoomTimer);
+            }
+            state.zoomTimer = setTimeout(() => {
+                if (state.zoomSettleControlLock) {
+                    state.pendingZoomVisualRefresh = true;
+                    return;
+                }
+                if (state.zoomSettleBlockedUntil && Date.now() < state.zoomSettleBlockedUntil) return;
+
+                finishZoomInteraction();
+            }, 0);
+        });
     }
 
     return {

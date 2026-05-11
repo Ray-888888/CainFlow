@@ -31,10 +31,21 @@ export function createViewportApi({
     function refreshNodeTextRendering() {
         const nodes = elements.nodesLayer.querySelectorAll('.node');
         if (!nodes.length) return;
+        const containerRect = elements.canvasContainer.getBoundingClientRect();
+        const visibleNodes = Array.from(nodes).filter((nodeEl) => {
+            const rect = nodeEl.getBoundingClientRect();
+            return !(
+                rect.right < containerRect.left ||
+                rect.left > containerRect.right ||
+                rect.bottom < containerRect.top ||
+                rect.top > containerRect.bottom
+            );
+        });
+        if (!visibleNodes.length) return;
 
-        nodes.forEach((nodeEl) => nodeEl.classList.add('render-refresh'));
+        visibleNodes.forEach((nodeEl) => nodeEl.classList.add('render-refresh'));
         requestAnimationFrameRef(() => {
-            nodes.forEach((nodeEl) => nodeEl.classList.remove('render-refresh'));
+            visibleNodes.forEach((nodeEl) => nodeEl.classList.remove('render-refresh'));
         });
     }
 

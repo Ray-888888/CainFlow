@@ -43,6 +43,35 @@ export function createNodeDomBindingsApi({
     const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container';
     const FALLBACK_DEFAULT_NODE_WIDTH = 180;
     const FALLBACK_DEFAULT_NODE_HEIGHT = 120;
+    const ZOOM_SETTLE_GUARD_MS = 220;
+
+    function postponeZoomSettle() {
+        state.zoomSettleBlockedUntil = Date.now() + ZOOM_SETTLE_GUARD_MS;
+    }
+
+    function lockZoomSettleForControl(control) {
+        postponeZoomSettle();
+        if (control?.tagName === 'SELECT') {
+            state.zoomSettleControlLock = true;
+        }
+    }
+
+    function flushPendingZoomVisualRefresh() {
+        state.zoomSettleControlLock = false;
+        if (!state.pendingZoomVisualRefresh) return;
+        state.pendingZoomVisualRefresh = false;
+        state.isInteracting = false;
+        canvasContainer.classList.remove('is-zooming');
+        documentRef.body.classList.remove('is-interacting');
+        documentRef.getElementById('connections-group').classList.remove('is-interacting');
+        viewportApi.updateCanvasTransform();
+        const requestFrame = documentRef.defaultView?.requestAnimationFrame;
+        if (typeof requestFrame === 'function') {
+            requestFrame(() => viewportApi.refreshNodeTextRendering());
+        } else {
+            viewportApi.refreshNodeTextRendering();
+        }
+    }
 
     function syncTextNodeData(id) {
         const node = state.nodes.get(id);
@@ -168,6 +197,128 @@ export function createNodeDomBindingsApi({
         container?.querySelectorAll('.node-port').forEach((portEl) => bindPortInteraction(portEl));
     }
 
+    function bindZoomSettleGuard(container) {
+        if (!container) return;
+        container.querySelectorAll('select, input, textarea, [contenteditable="true"]').forEach((control) => {
+            if (!control || control.dataset.zoomSettleGuardBound === '1') return;
+            control.dataset.zoomSettleGuardBound = '1';
+
+            ['pointerdown', 'mousedown', 'touchstart', 'focus'].forEach((eventName) => {
+                control.addEventListener(eventName, () => lockZoomSettleForControl(control), true);
+            });
+            ['change', 'blur'].forEach((eventName) => {
+                control.addEventListener(eventName, flushPendingZoomVisualRefresh, true);
+            });
+        });
+    }
+
+    function closeNodeSelectDropdowns(exceptWrapper = null) {
+        documentRef.querySelectorAll('.node-select').forEach((wrapper) => {
+            if (exceptWrapper && wrapper === exceptWrapper) return;
+            wrapper.classList.remove('open');
+            wrapper.querySelector('.node-select-trigger')?.setAttribute('aria-expanded', 'false');
+            wrapper.querySelector('.node-select-panel')?.classList.add('hidden');
+        });
+    }
+
+    function renderCustomSelectOptions(selectEl, wrapper) {
+        const trigger = wrapper.querySelector('.node-select-trigger');
+        const panel = wrapper.querySelector('.node-select-panel');
+        if (!trigger || !panel) return;
+
+        const selectedOption = selectEl.selectedOptions?.[0] || selectEl.options?.[0] || null;
+        trigger.querySelector('.node-select-trigger-label').textContent = selectedOption?.textContent || selectEl.value || '--';
+        panel.innerHTML = Array.from(selectEl.options || []).map((option) => `
+            <button
+                type="button"
+                class="node-select-option${option.selected ? ' selected' : ''}"
+                data-value="${escapeHtml(option.value)}"
+                ${option.disabled ? 'disabled' : ''}
+            >${escapeHtml(option.textContent || option.value || '')}</button>
+        `).join('');
+
+        panel.querySelectorAll('.node-select-option').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (button.disabled) return;
+                const nextValue = button.dataset.value || '';
+                if (selectEl.value !== nextValue) {
+                    selectEl.value = nextValue;
+                    selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                closeNodeSelectDropdowns();
+            });
+        });
+    }
+
+    function ensureCustomNodeSelect(selectEl) {
+        if (!selectEl || selectEl.dataset.customNodeSelectBound === '1') return;
+        selectEl.dataset.customNodeSelectBound = '1';
+        selectEl.classList.add('node-select-native');
+
+        const wrapper = documentRef.createElement('div');
+        wrapper.className = 'node-select';
+        wrapper.innerHTML = `
+            <button type="button" class="node-select-trigger" aria-expanded="false">
+                <span class="node-select-trigger-label"></span>
+                <span class="node-select-trigger-caret">▾</span>
+            </button>
+            <div class="node-select-panel hidden"></div>
+        `;
+        selectEl.insertAdjacentElement('afterend', wrapper);
+
+        const trigger = wrapper.querySelector('.node-select-trigger');
+        const panel = wrapper.querySelector('.node-select-panel');
+
+        trigger?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = panel?.classList.contains('hidden');
+            closeNodeSelectDropdowns(willOpen ? wrapper : null);
+            if (!panel) return;
+            panel.classList.toggle('hidden', !willOpen);
+            wrapper.classList.toggle('open', willOpen);
+            trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+
+        panel?.addEventListener('mousedown', (event) => {
+            event.stopPropagation();
+        });
+        panel?.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        panel?.addEventListener('wheel', (event) => {
+            event.stopPropagation();
+        }, { passive: true });
+
+        selectEl.addEventListener('change', () => renderCustomSelectOptions(selectEl, wrapper));
+
+        if (typeof MutationObserver !== 'undefined') {
+            const observer = new MutationObserver(() => renderCustomSelectOptions(selectEl, wrapper));
+            observer.observe(selectEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['selected', 'disabled', 'label', 'value'] });
+            if (!Array.isArray(selectEl._cleanupFns)) {
+                selectEl._cleanupFns = [];
+            }
+            selectEl._cleanupFns.push(() => observer.disconnect());
+        }
+
+        renderCustomSelectOptions(selectEl, wrapper);
+    }
+
+    function bindCustomNodeSelects(container) {
+        if (!container) return;
+        container.querySelectorAll('.node-field select').forEach((selectEl) => ensureCustomNodeSelect(selectEl));
+        if (documentRef.body?.dataset.nodeSelectCloseBound !== '1') {
+            documentRef.body.dataset.nodeSelectCloseBound = '1';
+            documentRef.addEventListener('click', (event) => {
+                if (event.target.closest('.node-select')) return;
+                closeNodeSelectDropdowns();
+            });
+        }
+    }
+
     function refreshTextSplitOutputPorts(nodeId, nextCount = getTextSplitOutputCount(nodeId)) {
         const node = state.nodes.get(nodeId);
         if (!node?.el) return;
@@ -181,6 +332,7 @@ export function createNodeDomBindingsApi({
 
         outputsSection.innerHTML = nextPorts.map((_, index) => renderTextSplitOutputPort(nodeId, index)).join('');
         bindNodePorts(outputsSection);
+        bindZoomSettleGuard(outputsSection);
 
         const validPortSet = new Set(nextPorts);
         const beforeConnectionCount = state.connections.length;
@@ -786,7 +938,7 @@ export function createNodeDomBindingsApi({
 
             if (target.closest('.node-delete, .node-bypass-btn')) return;
 
-            const interactiveSelector = 'input, textarea, select, button, .port, .node-resize-handle, [contenteditable="true"], .chat-response-area, .preview-controls, .workflow-action-btn';
+            const interactiveSelector = 'input, textarea, select, button, .node-select, .port, .node-resize-handle, [contenteditable="true"], .chat-response-area, .preview-controls, .workflow-action-btn';
             const isInteractive = target.closest(interactiveSelector);
 
             const dragAreaSelector = '.file-drop-zone, .preview-container, .save-preview-container, .node-header, .node-glass-bg';
@@ -913,10 +1065,11 @@ export function createNodeDomBindingsApi({
         });
 
         bindNodePorts(el);
+        bindZoomSettleGuard(el);
+        bindCustomNodeSelects(el);
 
         if (type === 'ImageImport') setupImageImport(id, el);
         else if (type === 'ImageGenerate') {
-            setupImagePreview(id, el);
             syncImageGenerateResolutionOptions(id);
             const modelSelect = el.querySelector(`#${id}-apiconfig`);
             modelSelect?.addEventListener('change', () => {

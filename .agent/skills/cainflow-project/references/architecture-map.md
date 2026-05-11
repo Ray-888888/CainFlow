@@ -45,11 +45,11 @@
 
 | 区域 | 主要文件 | 作用 |
 | --- | --- | --- |
-| 画布交互总线 | `js/canvas/canvas-interactions.js` | 鼠标事件总线、拖拽与交互调度；拖拽时节点晃动摘取连线的识别入口 |
+| 画布交互总线 | `js/canvas/canvas-interactions.js` | 鼠标事件总线、拖拽与交互调度；拖拽时节点晃动摘取连线的识别入口；滚轮缩放结束后的 settle delay 也在这里 |
 | 连线绘制 | `js/canvas/connections.js` | 节点连线绘制、连线可见性裁剪、选中态流动箭头动画、孤立节点拖入兼容连线的插入预览与提交；流动箭头受全局动画开关控制 |
 | 几何计算 | `js/canvas/geometry.js` | 贝塞尔曲线、直角圆角连线、剪线采样、坐标相关几何工具 |
 | 框选 | `js/canvas/selection.js` | 矩形框选逻辑与选中状态 |
-| 视口 | `js/canvas/viewport.js` | 缩放、平移、视口坐标变换 |
+| 视口 | `js/canvas/viewport.js` | 缩放、平移、视口坐标变换；节点文字清晰化重绘入口 `refreshNodeTextRendering()` 在这里 |
 
 ### Features（功能面板层）
 
@@ -104,10 +104,10 @@
 | 区域 | 主要文件 | 作用 |
 | --- | --- | --- |
 | 节点注册中心 | `js/nodes/registry.js` | 节点类型定义注册中心 |
-| 节点 DOM 绑定 | `js/nodes/node-dom-bindings.js` | 节点 DOM 事件绑定与输入监听、节点内控件值归一化；Text / TextSplit 节点编辑和右下角快速缩放时只同步数据与保存，不接入 textarea ResizeObserver shrink；可输入 textarea 的手动高度在这里通过 `textareaHeights` 记录并触发保存；TextSplit 节点在这里根据分隔结果动态重建输出端口、渲染可滚动节点内预览并清理失效连线；TextChat 回复区滚动与复制按钮事件也在这里接入；ImageGenerate 等可扩展 textarea 只能在真实尺寸变化时触发 fit，点击/聚焦提示词框不得触发 shrink |
+| 节点 DOM 绑定 | `js/nodes/node-dom-bindings.js` | 节点 DOM 事件绑定与输入监听、节点内控件值归一化；Text / TextSplit 节点编辑和右下角快速缩放时只同步数据与保存，不接入 textarea ResizeObserver shrink；可输入 textarea 的手动高度在这里通过 `textareaHeights` 记录并触发保存；TextSplit 节点在这里根据分隔结果动态重建输出端口、渲染可滚动节点内预览并清理失效连线；TextChat 回复区滚动与复制按钮事件也在这里接入；ImageGenerate 等可扩展 textarea 只能在真实尺寸变化时触发 fit，点击/聚焦提示词框不得触发 shrink；节点内自定义下拉（用于画布缩放场景）也在这里绑定 |
 | 节点生命周期 | `js/nodes/node-lifecycle.js` | 节点创建、销毁、状态更新；旧 TextInput/TextDisplay 创建时映射为 Text；Text 节点尺寸测量、非文本内容显示不全兜底、Alt 删除保留上下游连接、拖拽晃动摘取节点后的连线保留逻辑在这里；TextSplit 预览区和 TextChat 回复区这类可滚动长内容不得按完整内容撑高最小尺寸；删除、摘取、启用/禁用必须跳过运行中节点 |
 | 序列化 | `js/nodes/node-serializer.js` | 节点序列化、会话状态 payload、workflow 导出结构；workflow 导出只含画布、节点、连线和版本号；TextSplit 的 `delimiter` / `removeEmptyLines` / `previewEnabled` / `parts` 以及输入框手动高度缓存 `textareaHeights` 也在这里保存 |
-| 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、TextSplit 分隔符、删除空行与节点内预览控件、TextChat 回复框内部左上角小复制按钮、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮；TextSplit 不再渲染内部长文本输入框；textarea 初始高度从 `textareaHeights` 恢复；节点端口区当前由顶部并排的 `.node-ports-row` 统一生成，输入/输出两列顶部对齐 |
+| 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、TextSplit 分隔符、删除空行与节点内预览控件、TextChat 回复框内部左上角小复制按钮、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮；TextSplit 不再渲染内部长文本输入框；ImageGenerate 当前在节点内只显示 `xx/xx` 生成进度，不再显示结果预览；textarea 初始高度从 `textareaHeights` 恢复；节点端口区当前由顶部并排的 `.node-ports-row` 统一生成，输入/输出两列顶部对齐 |
 | 图片生成节点 | `js/nodes/types/image-generate.js` | ImageGenerate 节点定义、端口与默认尺寸 |
 | 图片导入节点 | `js/nodes/types/image-import.js` | ImageImport 节点定义 |
 | 图片对比节点 | `js/nodes/types/image-compare.js` | ImageCompare 节点定义，包含 A/B 图片输入与 B 图片输出 |
@@ -179,10 +179,13 @@
 | 修改文本节点输入/输出/尺寸行为 | `js/nodes/types/text.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `js/features/execution/execution-core.js`, `js/features/ui/global-interactions.js`, `index.html`, `css/legacy.css` |
 | 修改文本框高度缓存、TextSplit 预览区滚动或 TextChat 回复框布局 | `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `css/legacy.css` |
 | 新增或修改图片对比/预览/缩放/保存类节点 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/media/media-controller.js`, `js/features/execution/execution-core.js`, `css/components/nodes.css` |
+| 修改节点内下拉菜单与画布缩放的交互方式 | `js/nodes/node-dom-bindings.js`, `js/nodes/node-view-factory.js`, `css/legacy.css`, `css/themes.css`, `js/canvas/canvas-interactions.js` |
 | 修改图片对比高级模式（全屏对比、A/B 选图、历史图片、展开选择、滚轮缩放、左键平移） | `js/nodes/node-view-factory.js`, `js/features/media/media-controller.js`, `index.js`, `js/services/storage-idb.js`, `css/components/nodes.css` |
+| 修改 `ImageGenerate` 节点内进度区 / 结果区显示 | `js/nodes/node-view-factory.js`, `js/features/execution/execution-core.js`, `js/nodes/node-dom-bindings.js`, `css/legacy.css` |
 | 修复节点 DOM 绑定或事件 | `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js` |
 | 修复画布拖拽、框选、缩放、几何绘制、晃动摘取节点交互 | `js/canvas/canvas-interactions.js`, `js/canvas/selection.js`, `js/canvas/viewport.js`, `js/canvas/geometry.js` |
 | 修复连线绘制、孤立节点拖入连线插入预览 | `js/canvas/connections.js` |
+| 调整滚轮缩放结束后的文字锐化延迟或缩放手感 | `js/canvas/canvas-interactions.js`, `js/canvas/viewport.js`, `js/features/ui/toolbar-controller.js` |
 | 修复节点删除、摘取节点、节点尺寸显示不全兜底 | `js/nodes/node-lifecycle.js`, `js/nodes/node-dom-bindings.js` |
 | 更新操作帮助面板内容或帮助字体 | `js/features/help/help-panel.js`, `css/legacy.css` |
 | 修改共享常量或默认值 | `js/core/constants.js`, `js/core/state.js` |
@@ -252,6 +255,11 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - 文本输入框的手动高度持久化统一走 `textareaHeights`：节点模板恢复、输入监听后的保存、工作流序列化和复制粘贴都要同步更新；`ResizeObserver` 只记录高度变化并触发保存，不负责 shrink fit。
 - ImageGenerate / TextChat / Text 等带 textarea 的节点若出现“点击输入框后节点变小”，优先检查 `js/nodes/node-dom-bindings.js` 里的可扩展元素尺寸监听。只允许 `ResizeObserver` 等真实尺寸变化触发 fit，不要把 `mouseup`、`touchend`、focus/click 这类交互事件接到 shrink fit。
 - TextSplit 预览区、TextChat 回复区这类节点内长内容必须在节点内部滚动展示，不能把完整内容高度纳入最小尺寸测量；复制按钮等覆盖控件应收在结果框内部，不要额外占用一列布局。
+- 节点里若需要“下拉开着继续缩放画布”的体验，不要继续指望浏览器原生 `select` 弹层；优先改成节点内部的自定义下拉 DOM（trigger + panel），原生 `select` 只保留为隐藏值源或兼容层。相关绑定在 `js/nodes/node-dom-bindings.js`，样式收口在 `css/legacy.css` / `css/themes.css`。
+- 节点内自定义下拉的滚轮必须优先滚动下拉面板本身，而不是触发画布缩放；面板应拦截 `wheel` 并设置 `overscroll-behavior: contain`，避免滚动链传给外层画布。
+- 画布滚轮缩放“停下来后再变清晰”的体验由多处共同决定：滚轮结束延迟主要在 `js/canvas/canvas-interactions.js`，节点文字强制重绘在 `js/canvas/viewport.js` 的 `refreshNodeTextRendering()`，工具栏按钮缩放的收尾在 `js/features/ui/toolbar-controller.js`。要统一缩放手感时，这三处要一起看。
+- 优化缩放性能时，优先先调结束延迟、缩放曲线或文字重绘范围；不要轻易把 `viewport.js` 的视口更新和 `connections.js` 的 `updateAllConnections()` 拆开。现有连线渲染、初始化和工作流恢复流程依赖这条同步链路，拆错很容易造成已有连线不显示。
+- `ImageGenerate` 当前节点内结果区是纯进度读数，只显示 `xx/xx`，不再显示节点内图片预览；运行态进度数字由 `js/features/execution/execution-core.js` 更新，生成图片数据仍保留给下游节点、历史记录和持久化链路使用。若后续再把节点内图片预览加回来，需要同步复查 `node-view-factory.js`、`node-dom-bindings.js`、`execution-core.js` 与媒体 helper 是否仍匹配。
 - ImageCompare 高级模式继续沿用图片类节点分层：入口按钮和节点内结构放 `js/nodes/node-view-factory.js`；全屏高级对比界面、A/B 选择状态、从当前输入/画布图片节点/历史记录汇总图片、鼠标位置切割、滚轮缩放、左键平移和缩略图选择区展开放 `js/features/media/media-controller.js`；历史图片读取通过 `index.js` 注入 `getHistory`，来源在 `js/services/storage-idb.js`；样式集中在 `css/components/nodes.css`。高级模式选图显示可用缩略图，但设置 A/B 必须使用原图数据。
 - 节点或卡片里新增按钮时，除了交互功能本身，还要检查对齐、留白和与邻近文字/端口/控件的距离；优先让按钮留在所属容器的正常布局流里，避免被全局 `.preview-controls`、绝对定位或通用按钮样式挤到不合理的位置。
 - 历史记录面板显示可以使用 `item.thumb` 缩略图，但拖拽导入必须使用 `item.image` 原图。拖拽源在 `js/features/history/history-panel.js`，画布 drop 与现有 ImageImport 节点更新在 `js/features/ui/global-interactions.js`，直接写入 data URL 的能力放 `js/features/media/media-controller.js`。
