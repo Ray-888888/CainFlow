@@ -44,6 +44,7 @@ import { createHistoryFullscreenApi } from './js/features/history/history-fullsc
 import { createMediaControllerApi } from './js/features/media/media-controller.js';
 import { createImagePainterApi } from './js/features/media/image-painter.js';
 import { createMediaUtils } from './js/features/media/media-utils.js';
+import { createCameraControlNodeApi } from './js/features/camera/camera-control-node.js';
 import { createExecutionCoreApi } from './js/features/execution/execution-core.js';
 import { createWorkflowRunnerApi } from './js/features/execution/workflow-runner.js';
 import { createSessionManagerApi } from './js/features/persistence/session-manager.js';
@@ -205,6 +206,13 @@ const mediaUtils = createMediaUtils({
     getImageMaxPixels: () => state.imageMaxPixels,
     documentRef: document
 });
+const cameraControlNodeApi = createCameraControlNodeApi({
+    state,
+    fitNodeToContent: (nodeId) => fitNodeToContent(nodeId),
+    scheduleSave: () => scheduleSave(),
+    showToast,
+    documentRef: document
+});
 const viewportApi = createViewportApi({ state, elements, updateAllConnections: () => updateAllConnections() });
 const selectionApi = createSelectionApi({ state, updateAllConnections: () => updateAllConnections() });
 const nodeSerializer = createNodeSerializer({
@@ -234,6 +242,15 @@ let errorModalControllerApi = null;
 let toastControllerApi = null;
 let themeControllerApi = null;
 let promptLibraryApi = null;
+
+function refreshAllCameraControlPreviews() {
+    cameraControlNodeApi.refreshAllCameraControlPreviews();
+}
+
+function handleNodeGraphChanged() {
+    refreshAllImageResizePreviews();
+    refreshAllCameraControlPreviews();
+}
 
 function getLogPanelApi() {
     if (!logPanelApi) {
@@ -316,6 +333,7 @@ const mediaControllerApi = createMediaControllerApi({
     showToast,
     addLog,
     scheduleSave,
+    syncCameraControlNodePreview: (nodeId, imageValue) => cameraControlNodeApi.syncCameraControlFromExecution(nodeId, imageValue),
     openImagePainter,
     getHistory,
     fitNodeToContent
@@ -332,7 +350,7 @@ const connectionsApi = createConnectionsApi({
     pushHistory: () => pushHistory(),
     showToast,
     scheduleSave,
-    onConnectionsChanged: () => refreshAllImageResizePreviews(),
+    onConnectionsChanged: () => handleNodeGraphChanged(),
     addNode
 });
 const {
@@ -379,6 +397,7 @@ const nodeDomBindingsApi = createNodeDomBindingsApi({
     setupImageSave,
     setupImagePreview,
     setupImageCompare,
+    setupCameraControlNode: (id, el) => cameraControlNodeApi.setupCameraControlNode(id, el),
     copyToClipboard,
     showToast,
     scheduleSave,
@@ -387,7 +406,7 @@ const nodeDomBindingsApi = createNodeDomBindingsApi({
     getNodeMinimumSizeFromLifecycle: (nodeOrId) => getNodeLifecycleApi().getNodeMinimumSize(nodeOrId),
     updateAllConnections: () => updateAllConnections(),
     updatePortStyles: () => updatePortStyles(),
-    onConnectionsChanged: () => refreshAllImageResizePreviews()
+    onConnectionsChanged: () => handleNodeGraphChanged()
 });
 const {
     getPortPosition,
@@ -483,7 +502,7 @@ function getSessionManagerApi() {
             addNode,
             updateAllConnections,
             updatePortStyles,
-            onConnectionsChanged: () => refreshAllImageResizePreviews()
+            onConnectionsChanged: () => handleNodeGraphChanged()
         });
     }
     return sessionManagerApi;
@@ -501,7 +520,7 @@ function getProjectIoApi() {
             applyHistoryGridCols,
             updateAllConnections,
             updatePortStyles,
-            onConnectionsChanged: () => refreshAllImageResizePreviews(),
+            onConnectionsChanged: () => handleNodeGraphChanged(),
             viewportApi,
             showToast,
             applyTheme: (mode) => getThemeControllerApi().applyTheme(mode),
@@ -550,7 +569,7 @@ function getClipboardControllerApi() {
             addNode,
             updateAllConnections,
             updatePortStyles,
-            onConnectionsChanged: () => refreshAllImageResizePreviews(),
+            onConnectionsChanged: () => handleNodeGraphChanged(),
             scheduleSave
         });
     }
@@ -592,12 +611,13 @@ function getCanvasInteractionsApi() {
             commitConnectionInsertPreview,
             detachNodesFromConnections: (nodeIds, options) => getNodeLifecycleApi().detachNodesFromConnections(nodeIds, options),
             updatePortStyles,
-            onConnectionsChanged: () => refreshAllImageResizePreviews(),
+            onConnectionsChanged: () => handleNodeGraphChanged(),
             getConnectionCreateCandidates: (source) => getCompatibleNodeTypeCandidates(source),
             openConnectionCreatePopup: (popupState) => getContextMenuControllerApi().openConnectionCreatePopup(popupState),
             scheduleSave,
             serializeOneNode,
             addNode,
+            getNodeMinimumSize: (nodeOrId, options) => getNodeLifecycleApi().getNodeMinimumSize(nodeOrId, options),
             checkLineIntersection: checkLineIntersectionService,
             getConnectionSamplePoints: getConnectionSamplePointsService
         });
@@ -721,7 +741,7 @@ function getNodeLifecycleApi() {
             showToast,
             updateAllConnections,
             updatePortStyles,
-            onConnectionsChanged: () => refreshAllImageResizePreviews(),
+            onConnectionsChanged: () => handleNodeGraphChanged(),
             getCacheSidebarActive: () => document.getElementById('cache-sidebar')?.classList.contains('active'),
             updateCacheUsage: () => settingsControllerApi?.updateCacheUsage()
         });
@@ -793,6 +813,7 @@ function getExecutionCoreApi() {
             restoreImageResizePreview,
             refreshDependentImageResizePreviews,
             syncImageCompareNode,
+            syncCameraControlNode: (nodeId, imageValue) => cameraControlNodeApi.syncCameraControlFromExecution(nodeId, imageValue),
             fitNodeToContent,
             getAbortMessage: getAbortMessageService,
             updateAllConnections,
@@ -870,7 +891,7 @@ const workflowManagerApi = createWorkflowManagerApi({
     addNode,
     updateAllConnections,
     updatePortStyles,
-    onConnectionsChanged: () => refreshAllImageResizePreviews(),
+    onConnectionsChanged: () => handleNodeGraphChanged(),
     scheduleSave,
     showToast,
     panelManager

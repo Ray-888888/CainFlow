@@ -27,7 +27,7 @@ export function createNodeLifecycleApi({
 }) {
     const view = documentRef.defaultView || window;
     let pendingNodeSizeConnectionRefresh = null;
-    const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container';
+    const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container, .camera-control-node-preview';
     const NODE_SCROLL_CONTENT_SELECTOR = '.chat-response-area, .text-display-box';
     const FALLBACK_DEFAULT_NODE_WIDTH = 180;
     const FALLBACK_DEFAULT_NODE_HEIGHT = 120;
@@ -161,6 +161,14 @@ export function createNodeLifecycleApi({
         return getPx(style, 'row-gap') || getPx(style, 'gap') || 0;
     }
 
+    function getRenderedHeightFloor(el, style, minHeight, marginY) {
+        return Math.ceil(Math.max(
+            minHeight,
+            el.offsetHeight || 0,
+            el.scrollHeight || 0
+        ) + marginY);
+    }
+
     function isVisibleElement(el) {
         if (!el) return false;
         const style = getComputedStyle(el);
@@ -249,6 +257,58 @@ export function createNodeLifecycleApi({
             };
         }
 
+        if (el.classList.contains('camera-control-summary-grid')) {
+            const children = Array.from(el.children).filter(isVisibleElement);
+            const childSizes = children.map((child) => getElementMinimumSize(child));
+            const columnsText = String(style.gridTemplateColumns || '').trim();
+            let parsedColumns = 0;
+            let depth = 0;
+            let tokenStarted = false;
+            for (const char of columnsText) {
+                if (char === '(') {
+                    depth += 1;
+                    tokenStarted = true;
+                    continue;
+                }
+                if (char === ')') {
+                    depth = Math.max(0, depth - 1);
+                    tokenStarted = true;
+                    continue;
+                }
+                if (/\s/.test(char) && depth === 0) {
+                    if (tokenStarted) {
+                        parsedColumns += 1;
+                        tokenStarted = false;
+                    }
+                    continue;
+                }
+                tokenStarted = true;
+            }
+            if (tokenStarted) parsedColumns += 1;
+            const columns = Math.max(
+                1,
+                parsedColumns || 1,
+                children.length > 0 ? 1 : 0
+            );
+            const rows = Math.max(1, Math.ceil((children.length || 1) / columns));
+            const rowHeights = Array.from({ length: rows }, (_, rowIndex) => {
+                const start = rowIndex * columns;
+                const rowChildren = childSizes.slice(start, start + columns);
+                return rowChildren.length ? Math.max(...rowChildren.map((size) => size.height)) : 0;
+            });
+            const widestChild = childSizes.length ? Math.max(...childSizes.map((size) => size.width)) : minWidth;
+            return {
+                width: Math.ceil(Math.max(
+                    minWidth,
+                    columns * widestChild + Math.max(0, columns - 1) * getLayoutGap(style, 'x') + getBoxExtras(style, 'x')
+                ) + marginX),
+                height: Math.ceil(Math.max(
+                    minHeight,
+                    rowHeights.reduce((total, size) => total + size, 0) + Math.max(0, rows - 1) * getLayoutGap(style, 'y') + getBoxExtras(style, 'y')
+                ) + marginY)
+            };
+        }
+
         if (el.matches?.('input, select, textarea, button')) {
             const explicitHeightValue = String(el.style?.height || '');
             const explicitHeight = /px$/i.test(explicitHeightValue) ? parseFloat(explicitHeightValue) : NaN;
@@ -293,7 +353,10 @@ export function createNodeLifecycleApi({
 
         return {
             width: Math.ceil(Math.max(minWidth, contentWidth + getBoxExtras(style, 'x')) + marginX),
-            height: Math.ceil(Math.max(minHeight, contentHeight + getBoxExtras(style, 'y')) + marginY)
+            height: Math.max(
+                Math.ceil(Math.max(minHeight, contentHeight + getBoxExtras(style, 'y')) + marginY),
+                getRenderedHeightFloor(el, style, minHeight, marginY)
+            )
         };
     }
 
@@ -328,40 +391,57 @@ export function createNodeLifecycleApi({
         }
 
         const header = el.querySelector('.node-header');
+        const portsRow = el.querySelector('.node-ports-row');
         const body = el.querySelector('.node-body');
+        const isCollapsed = el.classList.contains('collapsed') || body?.classList.contains('is-collapsed');
         const originalElHeight = el.style.height;
         const originalBodyFlex = body?.style.flex || '';
         const originalBodyMinHeight = body?.style.minHeight || '';
         const originalBodyOverflowY = body?.style.overflowY || '';
+        const originalBodyOverflowX = body?.style.overflowX || '';
         const originalBodyMaxHeight = body?.style.maxHeight || '';
+        const originalBodyDisplay = body?.style.display || '';
 
         el.style.height = 'auto';
-        if (body) {
+        if (body && !isCollapsed) {
             body.style.flex = '0 0 auto';
             body.style.minHeight = 'auto';
             body.style.overflowY = 'visible';
+            body.style.overflowX = 'visible';
             body.style.maxHeight = 'none';
         }
 
         const headerWidth = getHeaderMinimumWidth(header, getDefaultNodeWidth(config));
         const headerHeight = getHeaderMeasuredHeight(header);
-        const bodySize = body ? getElementMinimumSize(body) : { width: 0, height: 0 };
+        const portsRowSize = portsRow ? getElementMinimumSize(portsRow) : { width: 0, height: 0 };
+        if (body && isCollapsed) {
+            body.style.display = 'none';
+        }
+        const bodySize = body && !isCollapsed ? getElementMinimumSize(body) : { width: 0, height: 0 };
+        const bodyRenderedHeight = body && !isCollapsed
+            ? Math.max(body.offsetHeight || 0, body.scrollHeight || 0)
+            : 0;
 
         el.style.height = originalElHeight;
         if (body) {
             body.style.flex = originalBodyFlex;
             body.style.minHeight = originalBodyMinHeight;
             body.style.overflowY = originalBodyOverflowY;
+            body.style.overflowX = originalBodyOverflowX;
             body.style.maxHeight = originalBodyMaxHeight;
+            body.style.display = originalBodyDisplay;
         }
 
+        const contentMinHeight = Math.ceil(headerHeight + portsRowSize.height + Math.max(bodySize.height, bodyRenderedHeight));
         return {
-            minWidth: Math.max(getDefaultNodeWidth(config), headerWidth, bodySize.width),
-            minHeight: Math.max(getDefaultNodeHeight(config), Math.ceil(headerHeight + bodySize.height))
+            minWidth: Math.max(getDefaultNodeWidth(config), headerWidth, portsRowSize.width, bodySize.width),
+            minHeight: isCollapsed
+                ? contentMinHeight
+                : Math.max(getDefaultNodeHeight(config), contentMinHeight)
         };
     }
 
-    function getNodeMinimumSize(nodeOrId) {
+    function getNodeMinimumSize(nodeOrId, options = {}) {
         const node = typeof nodeOrId === 'string' ? state.nodes.get(nodeOrId) : nodeOrId;
         if (!node) {
             return {
@@ -370,10 +450,42 @@ export function createNodeLifecycleApi({
             };
         }
         const config = nodeConfigs[node.type] || null;
-        const measured = getMeasuredNodeMinimumSize(node.el, config);
+        const measureWidth = Number(options.width);
+        const shouldMeasureAtWidth = node.el && Number.isFinite(measureWidth) && measureWidth > 0;
+        const originalWidth = shouldMeasureAtWidth ? node.el.style.width : '';
+        let measured;
+        try {
+            if (shouldMeasureAtWidth) {
+                node.el.style.width = `${Math.round(measureWidth)}px`;
+            }
+            measured = getMeasuredNodeMinimumSize(node.el, config);
+        } finally {
+            if (shouldMeasureAtWidth) {
+                node.el.style.width = originalWidth;
+            }
+        }
+        const configuredMinWidth = Number(config?.minWidth);
+        const configuredMinHeight = Number(config?.minHeight);
+        const isCollapsed = node.collapsed === true || node.el?.classList.contains('collapsed');
+        const collapsedMinHeight = isCollapsed ? measured.minHeight : 0;
         return {
-            minWidth: Math.max(getDefaultNodeWidth(config), Number(node.minWidth) || 0, measured.minWidth),
-            minHeight: Math.max(getDefaultNodeHeight(config), Number(node.minHeight) || 0, measured.minHeight)
+            minWidth: Math.max(
+                getDefaultNodeWidth(config),
+                Number.isFinite(configuredMinWidth) ? configuredMinWidth : 0,
+                Number(node.minWidth) || 0,
+                measured.minWidth
+            ),
+            minHeight: isCollapsed
+                ? Math.max(
+                    collapsedMinHeight,
+                    Number(node.minHeight) || 0
+                )
+                : Math.max(
+                    getDefaultNodeHeight(config),
+                    Number.isFinite(configuredMinHeight) ? configuredMinHeight : 0,
+                    Number(node.minHeight) || 0,
+                    measured.minHeight
+                )
         };
     }
 
@@ -461,7 +573,17 @@ export function createNodeLifecycleApi({
     function getNodeDefaultRestoreData(type) {
         if (!NODE_DEFAULT_TYPES.includes(type)) return null;
         const defaults = state.nodeDefaults?.[type];
-        if (!defaults || (!defaults.apiConfigId && !defaults.providerId)) return null;
+        if (!defaults) return null;
+        if (type === 'CameraControl') {
+            return {
+                pitch: defaults.pitch ?? 12,
+                yaw: defaults.yaw ?? 28,
+                distance: defaults.distance ?? 6.5,
+                fov: defaults.fov ?? 50,
+                roll: defaults.roll ?? 0
+            };
+        }
+        if (!defaults.apiConfigId && !defaults.providerId) return null;
         return {
             apiConfigId: defaults.apiConfigId || '',
             providerId: defaults.providerId || ''
@@ -534,6 +656,7 @@ export function createNodeLifecycleApi({
             defaultWidth: getDefaultNodeWidth(config),
             defaultHeight: getDefaultNodeHeight(config),
             userResized: effectiveRestoreData?.userResized === true,
+            collapsed: effectiveRestoreData?.collapsed === true,
             maxHeight: config.maxHeight || null,
             dirHandle: null,
             enabled: effectiveRestoreData?.enabled !== false,
@@ -559,6 +682,16 @@ export function createNodeLifecycleApi({
         if (effectiveRestoreData?.lastText) {
             nodeData.data.text = effectiveRestoreData.lastText;
         }
+        if (normalizedType === 'CameraControl') {
+            nodeData.data.pitch = Number.isFinite(Number(effectiveRestoreData?.pitch)) ? Number(effectiveRestoreData.pitch) : 12;
+            nodeData.data.yaw = Number.isFinite(Number(effectiveRestoreData?.yaw)) ? Number(effectiveRestoreData.yaw) : 28;
+            nodeData.data.distance = Number.isFinite(Number(effectiveRestoreData?.distance)) ? Number(effectiveRestoreData.distance) : 6.5;
+            nodeData.data.fov = Number.isFinite(Number(effectiveRestoreData?.fov)) ? Number(effectiveRestoreData.fov) : 50;
+            nodeData.data.roll = Number.isFinite(Number(effectiveRestoreData?.roll)) ? Number(effectiveRestoreData.roll) : 0;
+            nodeData.data.text = effectiveRestoreData?.cameraPrompt || effectiveRestoreData?.text || '';
+            nodeData.data.cameraPrompt = nodeData.data.text;
+            nodeData.data.cameraPreviewImage = effectiveRestoreData?.cameraPreviewImage || '';
+        }
         if (normalizedType === 'TextSplit') {
             nodeData.data.text = effectiveRestoreData?.text || effectiveRestoreData?.lastText || '';
             nodeData.data.delimiter = effectiveRestoreData?.delimiter || '';
@@ -571,7 +704,16 @@ export function createNodeLifecycleApi({
         }
         if (nodeData.isSucceeded) el.classList.add('completed');
         if (!nodeData.enabled) el.classList.add('disabled');
+        if (nodeData.collapsed) el.classList.add('collapsed');
         state.nodes.set(id, nodeData);
+        if (nodeData.collapsed) {
+            const collapsedMinimum = getNodeMinimumSize(nodeData);
+            if (collapsedMinimum?.minHeight) {
+                el.style.height = `${Math.round(collapsedMinimum.minHeight)}px`;
+                nodeData.height = Math.round(collapsedMinimum.minHeight);
+                nodeData.observedHeight = Math.round(collapsedMinimum.minHeight);
+            }
+        }
         el.addEventListener('load', (event) => {
             if (event.target?.tagName === 'IMG') {
                 scheduleEnsureNodeContentVisible(id);
@@ -806,12 +948,12 @@ export function createNodeLifecycleApi({
             const before = state.connections.length;
             state.connections = state.connections.filter((connection) => connection.from.nodeId !== nid && connection.to.nodeId !== nid);
             if (state.connections.length !== before) removedConnections = true;
-            node.el.querySelectorAll('textarea').forEach((textarea) => {
-                if (Array.isArray(textarea._cleanupFns)) {
-                    textarea._cleanupFns.forEach((cleanup) => {
+            [node.el, ...node.el.querySelectorAll('*')].forEach((element) => {
+                if (Array.isArray(element._cleanupFns)) {
+                    element._cleanupFns.forEach((cleanup) => {
                         if (typeof cleanup === 'function') cleanup();
                     });
-                    textarea._cleanupFns = [];
+                    element._cleanupFns = [];
                 }
             });
             disconnectNodeSizeObserver(node);

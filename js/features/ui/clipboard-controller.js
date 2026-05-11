@@ -34,7 +34,8 @@ export function createClipboardControllerApi({
             y: node.y,
             width: node.width || null,
             height: node.height || null,
-            userResized: node.userResized === true
+            userResized: node.userResized === true,
+            collapsed: node.collapsed === true
         };
         const textareaHeights = getNodeTextareaHeights(id);
         if (textareaHeights) serialized.textareaHeights = textareaHeights;
@@ -94,6 +95,16 @@ export function createClipboardControllerApi({
             serialized.removeEmptyLines = documentRef.getElementById(`${id}-remove-empty-lines`)?.checked === true;
             serialized.previewEnabled = documentRef.getElementById(`${id}-preview-enabled`)?.checked === true;
             serialized.parts = Array.isArray(node.data?.parts) ? node.data.parts.slice() : [];
+        }
+        if (node.type === 'CameraControl') {
+            serialized.pitch = Number(node.data?.pitch ?? 12);
+            serialized.yaw = Number(node.data?.yaw ?? 28);
+            serialized.distance = Number(node.data?.distance ?? 6.5);
+            serialized.fov = Number(node.data?.fov ?? 50);
+            serialized.roll = Number(node.data?.roll ?? 0);
+            serialized.text = node.data?.text || node.data?.cameraPrompt || '';
+            serialized.cameraPrompt = serialized.text;
+            serialized.cameraPreviewImage = node.data?.cameraPreviewImage || '';
         }
         return serialized;
     }

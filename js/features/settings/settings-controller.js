@@ -45,13 +45,18 @@ export function createSettingsControllerApi({
     const providerCollapseState = new Map();
     const modelCollapseState = new Map();
     const getProxyHeaders = createProxyHeadersGetter(() => state);
+    const MODEL_FETCH_TIMEOUT_SECONDS = 30;
+    const MODEL_FETCH_CLIENT_TIMEOUT_SECONDS = 35;
+    const ALLOWED_HOST_SYNC_TIMEOUT_SECONDS = 5;
     const modelFetchDialogState = {
         providerId: '',
         models: [],
         query: '',
         loading: false,
-        error: ''
+        error: '',
+        status: ''
     };
+    let activeModelFetchRequestId = 0;
     let openModelProviderPanelId = '';
 
     function getEndpointHost(endpoint) {
@@ -65,15 +70,45 @@ export function createSettingsControllerApi({
         }
     }
 
+    function createAbortErrorMessage(error, timeoutMessage) {
+        if (error?.name === 'AbortError') return timeoutMessage;
+        return error?.message || String(error);
+    }
+
+    async function fetchWithTimeout(url, options = {}, timeoutSeconds = 30, timeoutMessage = '请求超时') {
+        const Controller = windowRef.AbortController || globalThis.AbortController;
+        if (!Controller) {
+            return Promise.race([
+                fetchImpl(url, options),
+                new Promise((_, reject) => {
+                    windowRef.setTimeout(() => reject(new Error(timeoutMessage)), timeoutSeconds * 1000);
+                })
+            ]);
+        }
+
+        const controller = new Controller();
+        const timeoutId = windowRef.setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+        try {
+            return await fetchImpl(url, {
+                ...options,
+                signal: controller.signal
+            });
+        } catch (error) {
+            throw new Error(createAbortErrorMessage(error, timeoutMessage));
+        } finally {
+            windowRef.clearTimeout(timeoutId);
+        }
+    }
+
     async function ensureAllowedHostForProvider(provider, options = {}) {
         const host = getEndpointHost(provider?.endpoint);
         if (!host) return false;
         try {
-            const response = await fetchImpl('/api/allowed_hosts', {
+            const response = await fetchWithTimeout('/api/allowed_hosts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'add', host })
-            });
+            }, ALLOWED_HOST_SYNC_TIMEOUT_SECONDS, '允许域名同步超时，请检查本地服务是否响应');
             if (response.ok || response.status === 400) return true;
             if (!options.silent) {
                 const text = await response.text();
@@ -486,6 +521,7 @@ export function createSettingsControllerApi({
         modelFetchDialogState.query = '';
         modelFetchDialogState.loading = false;
         modelFetchDialogState.error = '';
+        modelFetchDialogState.status = '';
     }
 
     function renderProviderModelsDialog(options = {}) {
@@ -523,7 +559,7 @@ export function createSettingsControllerApi({
         }).join('');
 
         const emptyText = modelFetchDialogState.loading
-            ? '正在获取模型列表...'
+            ? (modelFetchDialogState.status || '正在获取模型列表...')
             : modelFetchDialogState.error
                 ? modelFetchDialogState.error
                 : query
@@ -584,30 +620,46 @@ export function createSettingsControllerApi({
         const provider = state.providers.find((candidate) => candidate.id === providerId);
         if (!provider) return;
 
+        const requestId = activeModelFetchRequestId + 1;
+        activeModelFetchRequestId = requestId;
         const protocol = getModelFetchProtocol(provider);
         const url = getProviderModelListUrl(provider, protocol);
         modelFetchDialogState.providerId = providerId;
         modelFetchDialogState.models = [];
         modelFetchDialogState.error = '';
+        modelFetchDialogState.status = '正在准备模型列表请求...';
         modelFetchDialogState.loading = true;
         renderProviderModelsDialog();
+        showToast(`正在获取 ${getSafeProviderName(provider)} 的模型列表...`, 'info', 4000);
 
         try {
             if (!url) throw new Error('请先填写供应商 API 地址');
             if (!provider.apikey && protocol === 'google') throw new Error('请先填写供应商 API 密钥');
 
+            modelFetchDialogState.status = '正在同步允许域名...';
+            renderProviderModelsDialog();
             await ensureAllowedHostForProvider(provider);
+            if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
 
             const headers = protocol === 'openai' && provider.apikey
                 ? getProxyHeaders(url, 'GET', {
                     Accept: 'application/json',
-                    Authorization: `Bearer ${provider.apikey}`
+                    Authorization: `Bearer ${provider.apikey}`,
+                    'x-proxy-timeout': String(MODEL_FETCH_TIMEOUT_SECONDS)
                 })
-                : getProxyHeaders(url, 'GET', { Accept: 'application/json' });
-            const response = await fetchImpl('/proxy', {
+                : getProxyHeaders(url, 'GET', {
+                    Accept: 'application/json',
+                    'x-proxy-timeout': String(MODEL_FETCH_TIMEOUT_SECONDS)
+                });
+            modelFetchDialogState.status = '正在请求供应商模型列表...';
+            renderProviderModelsDialog();
+            const response = await fetchWithTimeout('/proxy', {
                 method: 'POST',
                 headers
-            });
+            }, MODEL_FETCH_CLIENT_TIMEOUT_SECONDS, `获取模型列表超时（${MODEL_FETCH_CLIENT_TIMEOUT_SECONDS} 秒）。请检查供应商地址、密钥、代理设置或该供应商的 /models 接口是否可用`);
+            if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
+            modelFetchDialogState.status = '正在解析供应商返回...';
+            renderProviderModelsDialog();
             const responseText = await response.text();
             if (!response.ok) {
                 throw new Error(responseText || `请求失败 (${response.status})`);
@@ -621,16 +673,27 @@ export function createSettingsControllerApi({
             }
 
             const models = parseFetchedModels(payload, protocol);
+            if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
             modelFetchDialogState.models = models;
             modelFetchDialogState.error = models.length ? '' : '供应商返回的模型列表为空';
-            showToast(`已获取 ${models.length} 个模型`, models.length ? 'success' : 'info');
-        } catch (error) {
-            const message = error?.message || String(error);
-            modelFetchDialogState.error = `获取失败：${message}`;
-            showToast(modelFetchDialogState.error, 'error');
-        } finally {
+            modelFetchDialogState.status = '';
             modelFetchDialogState.loading = false;
             renderProviderModelsDialog();
+            showToast(`已获取 ${models.length} 个模型`, models.length ? 'success' : 'info');
+        } catch (error) {
+            if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
+            const message = error?.message || String(error);
+            modelFetchDialogState.error = `获取失败：${message}`;
+            modelFetchDialogState.status = '';
+            modelFetchDialogState.loading = false;
+            renderProviderModelsDialog();
+            showToast(modelFetchDialogState.error, 'error');
+        } finally {
+            if (requestId === activeModelFetchRequestId && modelFetchDialogState.providerId === providerId && modelFetchDialogState.loading) {
+                modelFetchDialogState.status = '';
+                modelFetchDialogState.loading = false;
+                renderProviderModelsDialog();
+            }
         }
     }
 

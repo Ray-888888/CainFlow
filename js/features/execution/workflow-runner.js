@@ -124,6 +124,25 @@ export function createWorkflowRunnerApi({
         return plan.scopeNodeSet.has(nodeId);
     }
 
+    function getPreservedNodeDataForReset(node) {
+        if (!node?.data || typeof node.data !== 'object') return {};
+
+        if (node.type === 'CameraControl') {
+            return {
+                pitch: node.data.pitch,
+                yaw: node.data.yaw,
+                distance: node.data.distance,
+                fov: node.data.fov,
+                roll: node.data.roll,
+                text: node.data.text,
+                cameraPrompt: node.data.cameraPrompt,
+                cameraPreviewImage: node.data.cameraPreviewImage
+            };
+        }
+
+        return {};
+    }
+
     function resetNodesForPlan(plan) {
         const runningNodeIds = getRunningNodeIds();
         for (const [nid, node] of state.nodes) {
@@ -140,7 +159,7 @@ export function createWorkflowRunnerApi({
             }
 
             node.el.classList.remove('completed', 'error', 'running');
-            node.data = {};
+            node.data = getPreservedNodeDataForReset(node);
             node.isSucceeded = false;
             if (node.type === 'ImageGenerate') {
                 node.generationCompletedCount = 0;

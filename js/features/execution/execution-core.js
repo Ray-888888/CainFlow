@@ -14,6 +14,7 @@ import {
     validateOpenAiImageSize
 } from './provider-request-utils.js';
 import { splitTextForTextSplitNode } from '../../core/common-utils.js';
+import { generateCameraPrompt } from '../camera/camera-control-node.js';
 
 export function createExecutionCoreApi({
     state,
@@ -40,6 +41,7 @@ export function createExecutionCoreApi({
     restoreImageResizePreview,
     refreshDependentImageResizePreviews,
     syncImageCompareNode,
+    syncCameraControlNode = () => '',
     fitNodeToContent,
     getAbortMessage,
     updateAllConnections,
@@ -436,6 +438,10 @@ function renderImageGeneratePreviewState(nodeId, {
                 return documentRef.getElementById(`${node.id}-text`)?.value;
             }
 
+            if (node.type === 'CameraControl') {
+                return node.data?.text || node.data?.cameraPrompt || undefined;
+            }
+
             if (node.type === 'TextChat') {
                 const responseArea = documentRef.getElementById(`${node.id}-response`);
                 if (!responseArea || responseArea.querySelector('.chat-response-placeholder')) return undefined;
@@ -606,7 +612,9 @@ function renderImageGeneratePreviewState(nodeId, {
                 const customResolution = customWidth && customHeight ? `${customWidth}x${customHeight}` : '';
                 const resolution = selectedResolution === 'custom' ? customResolution : selectedResolution;
                 const searchEnabled = documentRef.getElementById(`${id}-search`).checked;
-                const prompt = inputs.prompt || documentRef.getElementById(`${id}-prompt`).value;
+                const userPrompt = inputs.prompt || documentRef.getElementById(`${id}-prompt`).value;
+                const cameraPrompt = typeof inputs.camera_prompt === 'string' ? inputs.camera_prompt.trim() : '';
+                const prompt = [cameraPrompt, userPrompt].filter((part) => typeof part === 'string' && part.trim()).join(', ');
 
                 if (!apiCfg.apikey) throw new Error('API 供应商密钥未配置');
                 if (!prompt) throw new Error('请输入提示词');
@@ -977,6 +985,23 @@ function renderImageGeneratePreviewState(nodeId, {
             const text = hasIncomingText ? (inputs.text ?? '') : (textarea?.value || node.data.text || '');
             if (textarea && textarea.value !== text) textarea.value = text;
             node.data.text = text;
+            updateAllConnections();
+        },
+        CameraControl: async (node, inputs = {}) => {
+            if (Object.prototype.hasOwnProperty.call(inputs, 'image')) {
+                node.data.image = inputs.image || '';
+            }
+            const cameraData = {
+                pitch: Number(node.data?.pitch ?? 12),
+                yaw: Number(node.data?.yaw ?? 28),
+                distance: Number(node.data?.distance ?? 6.5),
+                fov: Number(node.data?.fov ?? 50),
+                roll: Number(node.data?.roll ?? 0)
+            };
+            const promptText = generateCameraPrompt(cameraData);
+            node.data.text = promptText;
+            node.data.cameraPrompt = promptText;
+            syncCameraControlNode(node.id, inputs.image || node.data.image || '');
             updateAllConnections();
         },
         TextSplit: async (node, inputs = {}) => {

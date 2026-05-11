@@ -10,12 +10,14 @@ import { imageSaveNode } from './types/image-save.js';
 import { textChatNode } from './types/text-chat.js';
 import { textNode } from './types/text.js';
 import { textSplitNode } from './types/text-split.js';
+import { cameraControlNode } from './types/camera-control.js';
 
 const nodeDefinitions = [
     imageImportNode,
     imageCompareNode,
     imageResizeNode,
     imageGenerateNode,
+    cameraControlNode,
     textChatNode,
     textNode,
     textSplitNode,

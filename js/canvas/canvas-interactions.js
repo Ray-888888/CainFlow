@@ -18,6 +18,7 @@ export function createCanvasInteractionsApi({
     scheduleSave,
     serializeOneNode,
     addNode,
+    getNodeMinimumSize = null,
     checkLineIntersection,
     getConnectionSamplePoints,
     onConnectionsChanged = () => {},
@@ -404,11 +405,29 @@ export function createCanvasInteractionsApi({
                     if (isNodeRunning(r.nodeId)) return;
                     const targetW = r.startWidth + dx;
                     const targetH = r.startHeight + dy;
+                    let dynamicMinWidth = r.minWidth;
+                    let dynamicMinHeight = r.minHeight;
+                    let constrainedWidth = Math.max(targetW, r.minWidth);
 
-                    const newW = Math.max(targetW, r.minWidth);
-                    const maxHeight = Number.isFinite(r.maxHeight) && r.maxHeight > 0 ? r.maxHeight : Infinity;
-                    const newH = Math.min(Math.max(targetH, r.minHeight), maxHeight);
-                    node.el.style.width = newW + 'px';
+                    if (typeof getNodeMinimumSize === 'function') {
+                        const provisionalMinimum = getNodeMinimumSize(node, { width: constrainedWidth });
+                        if (provisionalMinimum) {
+                            dynamicMinWidth = Math.max(dynamicMinWidth, Number(provisionalMinimum.minWidth) || 0);
+                        }
+
+                        constrainedWidth = Math.max(targetW, dynamicMinWidth);
+                        const finalMinimum = getNodeMinimumSize(node, { width: constrainedWidth });
+                        if (finalMinimum) {
+                            dynamicMinWidth = Math.max(dynamicMinWidth, Number(finalMinimum.minWidth) || 0);
+                            dynamicMinHeight = Math.max(dynamicMinHeight, Number(finalMinimum.minHeight) || 0);
+                            constrainedWidth = Math.max(targetW, dynamicMinWidth);
+                        }
+                    }
+
+                    const configuredMaxHeight = Number.isFinite(r.maxHeight) && r.maxHeight > 0 ? r.maxHeight : Infinity;
+                    const maxHeight = configuredMaxHeight >= dynamicMinHeight ? configuredMaxHeight : Infinity;
+                    const newH = Math.min(Math.max(targetH, dynamicMinHeight), maxHeight);
+                    node.el.style.width = constrainedWidth + 'px';
                     node.el.style.height = newH + 'px';
 
                     updateAllConnections();
@@ -516,12 +535,24 @@ export function createCanvasInteractionsApi({
                 const r = state.resizing;
                 const node = state.nodes.get(r.nodeId);
                 if (node) {
-                    node.width = parseInt(node.el.style.width, 10);
-                    node.height = parseInt(node.el.style.height, 10);
+                    let finalWidth = parseInt(node.el.style.width, 10);
+                    let finalHeight = parseInt(node.el.style.height, 10);
+                    if (typeof getNodeMinimumSize === 'function') {
+                        let minimum = getNodeMinimumSize(node, { width: finalWidth });
+                        finalWidth = Math.max(finalWidth, Number(minimum?.minWidth) || 0);
+                        minimum = getNodeMinimumSize(node, { width: finalWidth });
+                        finalHeight = Math.max(finalHeight, Number(minimum?.minHeight) || 0);
+                        node.el.style.width = `${Math.round(finalWidth)}px`;
+                        node.el.style.height = `${Math.round(finalHeight)}px`;
+                    }
+                    node.width = Math.round(finalWidth);
+                    node.height = Math.round(finalHeight);
+                    node.observedWidth = node.width;
+                    node.observedHeight = node.height;
                     node.userResized = true;
 
                     node.el.classList.remove('is-interacting');
-                    scheduleUIUpdate();
+                    updateAllConnections();
                 }
                 state.resizing = null;
                 scheduleSave();

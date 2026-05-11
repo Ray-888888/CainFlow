@@ -3,10 +3,11 @@
  */
 export const imageGenerateNode = {
     type: 'ImageGenerate',
-    title: '图片生成 (Gemini)',
+    title: '图片生成',
     cssClass: 'node-generate',
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
     inputs: [
+        { name: 'camera_prompt', type: 'text', label: '视角提示词' },
         { name: 'prompt', type: 'text', label: '提示词输入' },
         { name: 'image_1', type: 'image', label: '参考图 1' },
         { name: 'image_2', type: 'image', label: '参考图 2' },
@@ -18,6 +19,3 @@ export const imageGenerateNode = {
     defaultWidth: 320,
     defaultHeight: 600
 };
-/**
- * 定义图片生成节点的元数据、端口和默认尺寸。
- */

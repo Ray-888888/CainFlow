@@ -19,6 +19,15 @@
 - 新增按钮、图标按钮或按钮组时，要把按钮周围留白也当成正式需求：避免贴着文字、标签、端口、输入框或其他控件；如果按钮位置异常，先检查是否被全局定位或通用样式误伤。
 - 安全相关开关应放在独立安全卡片中展示，新增高风险选项时同步检查状态默认值与持久化链路。
 
+### 固定结构节点缩放约定
+
+- `CameraControl` 这类“预览区 + 多组控件 + 文本框”的固定结构节点，最小尺寸和内容显示兜底统一放在 `js/nodes/node-lifecycle.js`，不要在节点私有逻辑里各写一套裁剪补丁。
+- 用户拖拽缩小节点时，如果宽度变化会进一步抬高所需最小高度，就不能只沿用缩放开始时的最小值；应在 `js/canvas/canvas-interactions.js` 中按当前宽度动态重算共享最小尺寸，避免文本框和上方滑块、标签等发生重叠。
+- 节点内部的纵向间距要保持统一节奏：标签到控件、控件到控件、最后一组控件到结果区之间都按同一套 spacing 走，不要只对某个字段单独加一截特殊 margin。
+- 对浏览器原生滑块、文本框、预览区这类容易出现“视觉高度大于测量高度”的元素，要优先使用稳定块尺寸和明确的 `minHeight`；必要时直接提高节点定义里的 `defaultHeight` / `minHeight`，不要允许缩到必然冲突的尺寸。
+- 新增 3D 预览、媒体舞台、结果画布等 media-like 区域时，要确认它们纳入共享节点测量链，而不是只靠局部 CSS 高度撑住。
+- `CameraControl` 的编辑器只是一层临时壳：点击“编辑视角”时才显示 3D 界面，关闭后要把缩略图和相机参数留在 `node.data` 里；运行态重置不应把 `pitch` / `yaw` / `distance` / `fov` / `roll`、摄影提示词或预览图清空。
+
 ## 前端结构
 
 ### 启动 & 核心
@@ -74,6 +83,8 @@
 | 图片绘制 | `js/features/media/image-painter.js` | Canvas 图片绘制与合成 |
 | 媒体控制 | `js/features/media/media-controller.js` | 媒体资源生命周期管理、图片预览/保存/缩放/对比节点的运行态同步与交互；图片对比高级模式的全屏界面、A/B 选图、历史图片汇总、缩略图选择区展开、鼠标切割、滚轮缩放与左键平移；提供文件导入与 data URL 直接写入入口 |
 | 媒体工具 | `js/features/media/media-utils.js` | 图片格式转换、Blob 处理等工具函数 |
+| **相机** | | |
+| 视角控制 | `js/features/camera/camera-control-node.js` | `CameraControl` 节点的编辑器壳、3D 预览初始化、轨道控制、相机姿态采样，以及相机参数到英文摄影提示词的映射 |
 | **持久化** | | |
 | 项目导入导出 | `js/features/persistence/project-io.js` | 工作流 JSON 文件导入导出；导出不写入 API 供应商/模型配置，导入时保留当前 API 设置 |
 | 工作流模型引用解析 | `js/features/persistence/workflow-model-resolver.js` | 旧工作流模型 ID 到当前模型配置的自动匹配；缺失模型或供应商引用提示 |
@@ -108,6 +119,7 @@
 | 节点生命周期 | `js/nodes/node-lifecycle.js` | 节点创建、销毁、状态更新；旧 TextInput/TextDisplay 创建时映射为 Text；Text 节点尺寸测量、非文本内容显示不全兜底、Alt 删除保留上下游连接、拖拽晃动摘取节点后的连线保留逻辑在这里；TextSplit 预览区和 TextChat 回复区这类可滚动长内容不得按完整内容撑高最小尺寸；删除、摘取、启用/禁用必须跳过运行中节点 |
 | 序列化 | `js/nodes/node-serializer.js` | 节点序列化、会话状态 payload、workflow 导出结构；workflow 导出只含画布、节点、连线和版本号；TextSplit 的 `delimiter` / `removeEmptyLines` / `previewEnabled` / `parts` 以及输入框手动高度缓存 `textareaHeights` 也在这里保存 |
 | 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、TextSplit 分隔符、删除空行与节点内预览控件、TextChat 回复框内部左上角小复制按钮、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮；TextSplit 不再渲染内部长文本输入框；ImageGenerate 当前在节点内只显示 `xx/xx` 生成进度，不再显示结果预览；textarea 初始高度从 `textareaHeights` 恢复；节点端口区当前由顶部并排的 `.node-ports-row` 统一生成，输入/输出两列顶部对齐 |
+| 视角控制节点 | `js/nodes/types/camera-control.js` | CameraControl 节点定义、端口、默认尺寸与最小尺寸；固定结构节点不要把最小尺寸散落到私有逻辑里 |
 | 图片生成节点 | `js/nodes/types/image-generate.js` | ImageGenerate 节点定义、端口与默认尺寸 |
 | 图片导入节点 | `js/nodes/types/image-import.js` | ImageImport 节点定义 |
 | 图片对比节点 | `js/nodes/types/image-compare.js` | ImageCompare 节点定义，包含 A/B 图片输入与 B 图片输出 |
@@ -176,6 +188,8 @@
 | 新增或修改提示词库管理、预设卡片、多选删除、复制、导入画布、提示词 JSON 导入导出 | `js/features/prompts/prompt-library.js`, `index.html`, `index.js`, `css/features/panels.css`, `css/themes.css` |
 | 修复日志面板或错误详情 | `js/features/logs/log-panel.js`, `backend/services/log_service.py` |
 | 新增或修改节点类型 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `css/components/nodes.css` |
+| 修复固定结构节点缩放后内容裁剪、文本框显示不全或控件重叠 | `js/nodes/types/*.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `js/nodes/node-view-factory.js`, `css/components/nodes.css` |
+| 新增或修改 `CameraControl` 视角控制节点 | `js/nodes/types/camera-control.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/camera/camera-control-node.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `css/components/nodes.css`, `js/features/execution/execution-core.js`, `js/features/ui/clipboard-controller.js`, `js/features/persistence/project-io.js` |
 | 修改文本节点输入/输出/尺寸行为 | `js/nodes/types/text.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `js/features/execution/execution-core.js`, `js/features/ui/global-interactions.js`, `index.html`, `css/legacy.css` |
 | 修改文本框高度缓存、TextSplit 预览区滚动或 TextChat 回复框布局 | `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `css/legacy.css` |
 | 新增或修改图片对比/预览/缩放/保存类节点 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/media/media-controller.js`, `js/features/execution/execution-core.js`, `css/components/nodes.css` |
@@ -255,6 +269,11 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - 文本输入框的手动高度持久化统一走 `textareaHeights`：节点模板恢复、输入监听后的保存、工作流序列化和复制粘贴都要同步更新；`ResizeObserver` 只记录高度变化并触发保存，不负责 shrink fit。
 - ImageGenerate / TextChat / Text 等带 textarea 的节点若出现“点击输入框后节点变小”，优先检查 `js/nodes/node-dom-bindings.js` 里的可扩展元素尺寸监听。只允许 `ResizeObserver` 等真实尺寸变化触发 fit，不要把 `mouseup`、`touchend`、focus/click 这类交互事件接到 shrink fit。
 - TextSplit 预览区、TextChat 回复区这类节点内长内容必须在节点内部滚动展示，不能把完整内容高度纳入最小尺寸测量；复制按钮等覆盖控件应收在结果框内部，不要额外占用一列布局。
+- `CameraControl` 这类固定结构工具节点遵循统一责任链：节点定义在 `js/nodes/types/camera-control.js`，模板在 `js/nodes/node-view-factory.js`，DOM 绑定在 `js/nodes/node-dom-bindings.js`，3D 逻辑和 prompt 映射在 `js/features/camera/camera-control-node.js`，共享最小尺寸/显示兜底在 `js/nodes/node-lifecycle.js`，拖拽缩放期的动态最小尺寸约束在 `js/canvas/canvas-interactions.js`，样式在 `css/components/nodes.css`。
+- `CameraControl` 节点的编辑器只在用户点击“编辑视角”时出现；退出编辑后不应继续显示 3D 窗口，以免白白占用渲染压力。缩略图、参数和提示词要保存在 `node.data` 里，并在运行、复制、导出和恢复时保持一致。
+- 固定结构节点不要只在“开始拖拽缩放”时记录一次最小尺寸。只要节点宽度变化会影响内部换行、滑块占位或文本框可见高度，就要在缩放过程中重新读取共享测量值，避免缩小后出现滑块和文本、文本和文本框互相压住的回归。
+- 节点内部 spacing 也是共享体验的一部分：标签到控件、控件到控件、最后一组控件到结果区之间的留白需要一致；不要通过给某个字段单独补 margin 的方式修局部问题。
+- 新增 3D 预览区、媒体舞台或其他 media-like 容器时，先确认它们参与节点最小尺寸测量链，再决定节点默认高度和最小高度；不要只在 CSS 里写一个固定高度然后指望共享缩放逻辑自动兼容。
 - 节点里若需要“下拉开着继续缩放画布”的体验，不要继续指望浏览器原生 `select` 弹层；优先改成节点内部的自定义下拉 DOM（trigger + panel），原生 `select` 只保留为隐藏值源或兼容层。相关绑定在 `js/nodes/node-dom-bindings.js`，样式收口在 `css/legacy.css` / `css/themes.css`。
 - 节点内自定义下拉的滚轮必须优先滚动下拉面板本身，而不是触发画布缩放；面板应拦截 `wheel` 并设置 `overscroll-behavior: contain`，避免滚动链传给外层画布。
 - 画布滚轮缩放“停下来后再变清晰”的体验由多处共同决定：滚轮结束延迟主要在 `js/canvas/canvas-interactions.js`，节点文字强制重绘在 `js/canvas/viewport.js` 的 `refreshNodeTextRendering()`，工具栏按钮缩放的收尾在 `js/features/ui/toolbar-controller.js`。要统一缩放手感时，这三处要一起看。

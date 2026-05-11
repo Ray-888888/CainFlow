@@ -3,7 +3,7 @@
  */
 import { DEFAULT_MODELS, DEFAULT_PROVIDERS } from './constants.js';
 
-export const NODE_DEFAULT_TYPES = ['ImageGenerate', 'TextChat'];
+export const NODE_DEFAULT_TYPES = ['ImageGenerate', 'TextChat', 'CameraControl'];
 
 export function createInitialNodeDefaults() {
     return NODE_DEFAULT_TYPES.reduce((defaults, type) => {
@@ -11,6 +11,15 @@ export function createInitialNodeDefaults() {
             apiConfigId: '',
             providerId: ''
         };
+        if (type === 'CameraControl') {
+            defaults[type] = {
+                pitch: 12,
+                yaw: 28,
+                distance: 6.5,
+                fov: 50,
+                roll: 0
+            };
+        }
         return defaults;
     }, {});
 }
@@ -20,6 +29,16 @@ export function normalizeNodeDefaults(raw = {}) {
     NODE_DEFAULT_TYPES.forEach((type) => {
         const current = raw?.[type];
         if (!current || typeof current !== 'object') return;
+        if (type === 'CameraControl') {
+            defaults[type] = {
+                pitch: Number.isFinite(Number(current.pitch)) ? Number(current.pitch) : 12,
+                yaw: Number.isFinite(Number(current.yaw)) ? Number(current.yaw) : 28,
+                distance: Number.isFinite(Number(current.distance)) ? Number(current.distance) : 6.5,
+                fov: Number.isFinite(Number(current.fov)) ? Number(current.fov) : 50,
+                roll: Number.isFinite(Number(current.roll)) ? Number(current.roll) : 0
+            };
+            return;
+        }
         defaults[type] = {
             apiConfigId: typeof current.apiConfigId === 'string' ? current.apiConfigId : '',
             providerId: typeof current.providerId === 'string' ? current.providerId : ''

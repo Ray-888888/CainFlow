@@ -12,6 +12,15 @@ import {
 } from '../features/execution/provider-request-utils.js';
 import { splitTextForTextSplitNode } from '../core/common-utils.js';
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function renderPorts(id, ports, direction) {
     if (!ports.length) return '';
 
@@ -88,10 +97,12 @@ function renderPortSections(id, config) {
     `;
 }
 
-function renderNodeHeader(id, config) {
+function renderNodeHeader(id, config, options = {}) {
+    const collapseTitle = options.collapsed ? '展开节点' : '折叠节点';
+    const collapseStateClass = options.collapsed ? 'is-collapsed' : '';
     return `
         <div class="node-glass-bg"></div>
-        <div class="node-header">
+        <div class="node-header" data-node-id="${id}" title="双击折叠或展开">
             <div class="header-left">
                 ${config.icon}
                 <span class="node-title">${config.title}</span>
@@ -101,6 +112,11 @@ function renderNodeHeader(id, config) {
                     <div class="heartbeat-dot" id="${id}-heartbeat" title="连接正常"></div>
                     <span id="${id}-time"></span>
                 </span>
+                <button class="node-collapse-btn ${collapseStateClass}" data-node-id="${id}" title="${collapseTitle}" aria-label="${collapseTitle}" aria-expanded="${options.collapsed ? 'false' : 'true'}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
                 <button class="node-bypass-btn" data-node-id="${id}" title="启用/禁用节点">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                 </button>
@@ -110,7 +126,6 @@ function renderNodeHeader(id, config) {
             </div>
         </div>
         <div class="node-resize-handle" data-node-id="${id}"></div>
-        <div class="node-body">
     `;
 }
 
@@ -278,6 +293,37 @@ function renderImageGenerateBody(id, restoreData, models, providers) {
             <div class="image-generation-progress" id="${id}-generation-progress" aria-live="polite">0/${generationCount}</div>
         </div>
         <div class="node-error-msg" id="${id}-error"></div>
+    `;
+}
+
+function getCameraControlValue(restoreData = {}, key, fallback) {
+    const value = Number(restoreData?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+function renderCameraControlBody(id, restoreData) {
+    const rd = restoreData || {};
+    const hasReferenceImage = typeof rd.image === 'string' && rd.image.trim() !== '';
+    const previewImage = typeof rd.cameraPreviewImage === 'string' ? rd.cameraPreviewImage : '';
+    const placeholder = hasReferenceImage
+        ? '点击“编辑视角”生成当前角度预览'
+        : '等待参考图输入';
+
+    return `
+        <div class="camera-control-compact">
+            <button type="button" class="camera-control-open-btn" id="${id}-camera-open">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+                编辑视角
+            </button>
+            <div class="camera-control-node-preview ${previewImage ? 'has-image' : ''}" id="${id}-camera-preview">
+                ${previewImage
+        ? `<img src="${previewImage}" alt="视角预览图" draggable="false" />`
+        : `<div class="camera-control-node-preview-placeholder">${escapeHtml(placeholder)}</div>`}
+            </div>
+        </div>
     `;
 }
 
@@ -491,6 +537,7 @@ function renderNodeBody(type, id, restoreData, state) {
     if (type === 'ImageImport') return renderImageImportBody(id, restoreData);
     if (type === 'ImageResize') return renderImageResizeBody(id, restoreData);
     if (type === 'ImageGenerate') return renderImageGenerateBody(id, restoreData, state.models, state.providers);
+    if (type === 'CameraControl') return renderCameraControlBody(id, restoreData);
     if (type === 'TextChat') return renderTextChatBody(id, restoreData, state.models, state.providers);
     if (type === 'ImagePreview') return renderImagePreviewBody(id);
     if (type === 'ImageCompare') return renderImageCompareBody(id);
@@ -504,9 +551,12 @@ export function createNodeMarkup({ type, id, config, restoreData, state }) {
     const effectiveConfig = type === 'TextSplit'
         ? { ...config, outputs: getTextSplitOutputPorts(restoreData) }
         : config;
+    const isCollapsed = restoreData?.collapsed === true;
+    const bodyClassName = isCollapsed ? 'node-body is-collapsed' : 'node-body';
     return [
-        renderNodeHeader(id, effectiveConfig),
+        renderNodeHeader(id, effectiveConfig, { collapsed: isCollapsed }),
         renderPortSections(id, effectiveConfig),
+        `<div class="${bodyClassName}">`,
         renderNodeBody(type, id, restoreData, state),
         '</div>'
     ].join('');

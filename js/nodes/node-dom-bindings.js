@@ -29,6 +29,7 @@ export function createNodeDomBindingsApi({
     setupImageSave,
     setupImagePreview,
     setupImageCompare,
+    setupCameraControlNode,
     copyToClipboard,
     showToast,
     scheduleSave,
@@ -346,6 +347,61 @@ export function createNodeDomBindingsApi({
         scheduleSave();
     }
 
+    function toggleNodeCollapsed(id) {
+        const node = state.nodes.get(id);
+        if (!node?.el) return;
+        if (isNodeRunning(id)) {
+            showToast('节点正在运行，暂不能折叠或展开', 'warning');
+            return;
+        }
+
+        const body = node.el.querySelector('.node-body');
+        if (!body) return;
+
+        const currentHeight = node.el.offsetHeight || Number(node.height) || 0;
+        const nextCollapsed = !node.collapsed;
+        if (!nextCollapsed && Number.isFinite(node.collapsedExpandedHeight) && node.collapsedExpandedHeight > 0) {
+            node.el.style.height = `${Math.round(node.collapsedExpandedHeight)}px`;
+            node.height = Math.round(node.collapsedExpandedHeight);
+            node.observedHeight = Math.round(node.collapsedExpandedHeight);
+        } else if (currentHeight > 0) {
+            node.collapsedExpandedHeight = currentHeight;
+        }
+
+        node.collapsed = nextCollapsed;
+        node.el.classList.toggle('collapsed', nextCollapsed);
+        body.classList.toggle('is-collapsed', nextCollapsed);
+        const collapseButton = node.el.querySelector('.node-collapse-btn');
+        if (collapseButton) {
+            collapseButton.classList.toggle('is-collapsed', nextCollapsed);
+            collapseButton.title = nextCollapsed ? '展开节点' : '折叠节点';
+            collapseButton.setAttribute('aria-label', nextCollapsed ? '展开节点' : '折叠节点');
+            collapseButton.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
+        }
+
+        const minimum = typeof getNodeMinimumSizeFromLifecycle === 'function'
+            ? getNodeMinimumSizeFromLifecycle(node)
+            : getConfiguredDefaultSize(node, node.el, 180);
+        const currentWidth = node.el.offsetWidth || Number(node.width) || minimum.minWidth;
+        const currentMeasuredHeight = node.el.offsetHeight || Number(node.height) || minimum.minHeight;
+        const nextHeight = nextCollapsed
+            ? minimum.minHeight
+            : Math.max(currentMeasuredHeight, minimum.minHeight);
+
+        node.el.style.height = `${Math.round(nextHeight)}px`;
+        node.width = Math.round(currentWidth);
+        node.height = Math.round(nextHeight);
+        node.observedWidth = Math.round(currentWidth);
+        node.observedHeight = Math.round(nextHeight);
+
+        updateAllConnections();
+        const requestFrame = documentRef.defaultView?.requestAnimationFrame;
+        if (typeof requestFrame === 'function') {
+            requestFrame(() => updateAllConnections());
+        }
+        scheduleSave();
+    }
+
     function syncTextSplitNodeData(id, options = {}) {
         const { refreshPorts = true } = options;
         const node = state.nodes.get(id);
@@ -410,12 +466,14 @@ export function createNodeDomBindingsApi({
     }
 
     function getRememberedNodeDefault(type) {
-        if (type !== 'ImageGenerate' && type !== 'TextChat') return null;
+        if (type !== 'ImageGenerate' && type !== 'TextChat' && type !== 'CameraControl') return null;
         if (!state.nodeDefaults || typeof state.nodeDefaults !== 'object') {
             state.nodeDefaults = {};
         }
         if (!state.nodeDefaults[type] || typeof state.nodeDefaults[type] !== 'object') {
-            state.nodeDefaults[type] = { apiConfigId: '', providerId: '' };
+            state.nodeDefaults[type] = type === 'CameraControl'
+                ? { pitch: 12, yaw: 28, distance: 6.5, fov: 50, roll: 0 }
+                : { apiConfigId: '', providerId: '' };
         }
         return state.nodeDefaults[type];
     }
@@ -456,6 +514,15 @@ export function createNodeDomBindingsApi({
     function persistNodeModelSelection(id, type) {
         const defaults = getRememberedNodeDefault(type);
         if (!defaults) return;
+        if (type === 'CameraControl') {
+            const node = state.nodes.get(id);
+            defaults.pitch = Number(node?.data?.pitch ?? defaults.pitch ?? 12);
+            defaults.yaw = Number(node?.data?.yaw ?? defaults.yaw ?? 28);
+            defaults.distance = Number(node?.data?.distance ?? defaults.distance ?? 6.5);
+            defaults.fov = Number(node?.data?.fov ?? defaults.fov ?? 50);
+            defaults.roll = Number(node?.data?.roll ?? defaults.roll ?? 0);
+            return;
+        }
         const modelSelect = documentRef.getElementById(`${id}-apiconfig`);
         const providerSelect = documentRef.getElementById(`${id}-provider`);
         defaults.apiConfigId = modelSelect?.value || '';
@@ -807,12 +874,14 @@ export function createNodeDomBindingsApi({
 
     function getNodeMinimumSize(el, headerFallbackWidth) {
         const header = el.querySelector('.node-header');
+        const portsRow = el.querySelector('.node-ports-row');
         const body = el.querySelector('.node-body');
         const bodyStyle = body ? getComputedStyle(body) : null;
         const bodyPaddingX = bodyStyle ? getPx(bodyStyle, 'padding-left') + getPx(bodyStyle, 'padding-right') : 0;
         const bodyPaddingY = bodyStyle ? getPx(bodyStyle, 'padding-top') + getPx(bodyStyle, 'padding-bottom') : 0;
         const headerWidth = getHeaderMinimumWidth(header, headerFallbackWidth);
         const headerHeight = getHeaderMeasuredHeight(header);
+        const portsRowHeight = portsRow && isVisibleElement(portsRow) ? getElementMinimumHeight(portsRow) : 0;
         const isCompactTextNode = el.classList.contains('node-text');
         const baseMinWidth = isCompactTextNode ? 120 : 180;
         const baseMinHeight = isCompactTextNode ? 88 : 120;
@@ -904,7 +973,7 @@ export function createNodeDomBindingsApi({
 
         return {
             minWidth: Math.max(baseMinWidth, Math.ceil(headerWidth), Math.ceil(minContentWidth + bodyPaddingX)),
-            minHeight: Math.max(baseMinHeight, Math.ceil(headerHeight + minBodyHeight))
+            minHeight: Math.max(baseMinHeight, Math.ceil(headerHeight + portsRowHeight + minBodyHeight))
         };
     }
 
@@ -1034,6 +1103,19 @@ export function createNodeDomBindingsApi({
             toggleNodesEnabled(nodesToUpdate, id);
         });
 
+        el.querySelector('.node-header')?.addEventListener('dblclick', (e) => {
+            if (e.target.closest('.node-delete, .node-bypass-btn, .node-collapse-btn')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            toggleNodeCollapsed(id);
+        });
+
+        el.querySelector('.node-collapse-btn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleNodeCollapsed(id);
+        });
+
         el.querySelector('.node-resize-handle').addEventListener('mousedown', (e) => {
             const isPanAction = e.button === 1 || (e.button === 0 && e.altKey);
             if (isPanAction) return;
@@ -1124,6 +1206,11 @@ export function createNodeDomBindingsApi({
         else if (type === 'ImageSave') setupImageSave(id, el);
         else if (type === 'ImagePreview') setupImagePreview(id, el);
         else if (type === 'ImageCompare') setupImageCompare(id, el);
+        else if (type === 'CameraControl') {
+            setupCameraControlNode?.(id, el);
+            persistNodeModelSelection(id, type);
+            fitNodeToContent(id);
+        }
         else if (type === 'TextChat') {
             syncNodeProviderOptions(id, type);
             const modelSelect = el.querySelector(`#${id}-apiconfig`);
@@ -1165,6 +1252,10 @@ export function createNodeDomBindingsApi({
             if (type === 'TextSplit' && (input.id === `${id}-delimiter` || input.id === `${id}-remove-empty-lines` || input.id === `${id}-preview-enabled`)) {
                 input.addEventListener('input', () => syncTextSplitNodeData(id));
                 input.addEventListener('change', () => syncTextSplitNodeData(id));
+            }
+            if (type === 'CameraControl' && /^.+-(pitch|yaw|distance|fov|roll)$/.test(input.id)) {
+                input.addEventListener('input', () => persistNodeModelSelection(id, type));
+                input.addEventListener('change', () => persistNodeModelSelection(id, type));
             }
 
             const isExpandable = input.closest('.node-field-expand');

@@ -11,6 +11,7 @@
 | Core | `js/core/constants.js`, `js/core/elements.js`, `js/core/state.js` | 共享常量、DOM 引用、初始状态 |
 | Services | `js/services/api-client.js`, `js/services/storage-idb.js`, `js/services/workflow-api.js` | 代理请求头、IndexedDB、工作流文件 API |
 | Canvas | `js/canvas/geometry.js`, `js/canvas/selection.js`, `js/canvas/viewport.js` | 贝塞尔几何、框选、缩放和平移 |
+| CameraControl | `js/nodes/types/camera-control.js`, `js/features/camera/camera-control-node.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `css/components/nodes.css` | 视角控制节点的定义、编辑器壳、3D 预览、最小尺寸测量、缩放期约束与样式 |
 | 历史记录 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js` | 侧边历史面板、历史预览、全屏历史浏览与按天分组工具 |
 | 日志 | `js/features/logs/log-panel.js` | 日志面板 UI、日志渲染、错误详情入口 |
 | 设置 | `js/features/settings/settings-controller.js`, `js/features/settings/settings-modal.js` | 设置数据加载、API配置与弹窗行为 |
@@ -69,6 +70,7 @@
 | 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js`, `js/services/storage-idb.js`, `index.js` |
 | 修复日志面板或错误详情 | `js/features/logs/log-panel.js`, `index.js` |
 | 新增或修改节点类型 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `index.html` (右键菜单), `js/features/execution/execution-core.js` (执行逻辑) |
+| 新增或修改 `CameraControl` 视角控制节点 | `js/nodes/types/camera-control.js`, `js/features/camera/camera-control-node.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `css/components/nodes.css`, `js/features/execution/execution-core.js` |
 | 修复节点交互行为 | `js/nodes/node-dom-bindings.js`, `js/features/media/media-controller.js` (针对媒体类节点) |
 | 修复画布拖拽、框选、缩放、几何绘制 | `js/canvas/selection.js`, `js/canvas/viewport.js`, `js/canvas/geometry.js`, `index.js` |
 | 修改共享常量或默认值 | `js/core/constants.js`, `js/core/state.js` |
@@ -95,6 +97,7 @@ rg "handle_get|handle_post|handle_delete|def " backend -g "*.py"
 - `js/main.js` 保持极简。
 - 行为是 feature 级别的，就新增到 `js/features/<feature>/`。
 - 供应商协议、模型能力、OpenAI/Gemini 生图请求路径、请求体和分辨率预设优先放 `js/features/execution/provider-request-utils.js`；实际执行时的取 DOM 值、选择 JSON 或 multipart、调用 `/proxy` 放 `js/features/execution/execution-core.js`。
+- `CameraControl` 节点点击“编辑视角”后才显示 3D 界面；退出后要隐藏 3D 窗口，把缩略图和参数留在 `node.data` 里，运行重置也不要把这些数据清掉。
 - OpenAI 兼容生图无参考图走 `/v1/images/generations`；有 `image_1` 到 `image_5` 任意参考图走 `/v1/images/edits`。`/images/edits` 必须发送 `multipart/form-data`，图片作为文件字段上传；不要用 JSON `reference_images` 代替 multipart。
 - OpenAI 兼容生图分辨率菜单由 `provider-request-utils.js` 的选项驱动：`自动` 使用空值且不发送 `size`，固定项使用 OpenAI `WxH` size，自定义项由节点 UI 的“宽度输入框 x 高度输入框”拼成 `宽x高`。相关 UI 在 `js/nodes/node-view-factory.js` / `js/nodes/node-dom-bindings.js`，序列化同步更新 `js/nodes/node-serializer.js` 和 `js/features/ui/clipboard-controller.js`。
 - 后端按 route 与 service 分责，不要混写。

@@ -15,6 +15,7 @@ export function createMediaControllerApi({
     showToast,
     addLog,
     scheduleSave,
+    syncCameraControlNodePreview = () => {},
     openImagePainter,
     getHistory = async () => [],
     fitNodeToContent = () => {},
@@ -477,6 +478,11 @@ export function createMediaControllerApi({
                     ...options,
                     sourceImage: getNodePreviewSourceData(node)
                 }, visited);
+                continue;
+            }
+
+            if (node.type === 'CameraControl') {
+                await syncCameraControlNodePreview(nodeId, sourceImage);
             }
         }
     }
