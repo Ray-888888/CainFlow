@@ -83,12 +83,27 @@ def handle_proxy_request(handler):
     req_headers = {}
     for key, value in handler.headers.items():
         lowered = key.lower()
-        if lowered not in ['host', 'x-target-url', 'x-target-url-b64', 'x-target-method', 'x-allow-private-network-targets', 'content-length', 'connection', 'origin', 'referer', 'accept-encoding']:
+        if lowered not in [
+            'host',
+            'x-target-url',
+            'x-target-url-b64',
+            'x-target-method',
+            'x-allow-private-network-targets',
+            'x-proxy-enabled',
+            'x-proxy-host',
+            'x-proxy-port',
+            'x-proxy-timeout',
+            'content-length',
+            'connection',
+            'origin',
+            'referer',
+            'accept-encoding',
+        ]:
             req_headers[key] = value
 
-    req_headers['Connection'] = 'keep-alive'
+    req_headers['Connection'] = 'close'
     if 'user-agent' not in [header.lower() for header in req_headers.keys()]:
-        req_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.7.9'
+        req_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.7.9.1'
 
     context = ssl.create_default_context()
     context.check_hostname = False
@@ -204,7 +219,9 @@ def handle_proxy_request(handler):
         handler.send_response(upstream['status'])
         for key, value in response_headers_to_send:
             handler.send_header(key, value)
+        handler.send_header('Connection', 'close')
         handler.end_headers()
+        handler.close_connection = True
 
         preview = bytearray()
         total_bytes = 0

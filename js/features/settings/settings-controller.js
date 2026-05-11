@@ -100,6 +100,20 @@ export function createSettingsControllerApi({
         }
     }
 
+    async function readResponseTextWithTimeout(response, timeoutSeconds = 30, timeoutMessage = '读取响应超时') {
+        let timeoutId = null;
+        try {
+            return await Promise.race([
+                response.text(),
+                new Promise((_, reject) => {
+                    timeoutId = windowRef.setTimeout(() => reject(new Error(timeoutMessage)), timeoutSeconds * 1000);
+                })
+            ]);
+        } finally {
+            if (timeoutId !== null) windowRef.clearTimeout(timeoutId);
+        }
+    }
+
     async function ensureAllowedHostForProvider(provider, options = {}) {
         const host = getEndpointHost(provider?.endpoint);
         if (!host) return false;
@@ -143,7 +157,13 @@ export function createSettingsControllerApi({
         return String(provider?.name || '').trim() || '未命名供应商';
     }
 
+    function is6789ApiEndpoint(endpoint) {
+        const host = getEndpointHost(endpoint);
+        return host === '6789api.top' || host.endsWith('.6789api.top');
+    }
+
     function getModelFetchProtocol(provider) {
+        if (is6789ApiEndpoint(provider?.endpoint)) return 'openai';
         return normalizeProviderType(provider?.type, provider, 'openai') || 'openai';
     }
 
@@ -213,6 +233,15 @@ export function createSettingsControllerApi({
 
     function inferFetchedModelProtocol(provider, fetchedModel = {}) {
         const fingerprint = `${fetchedModel.id || ''} ${fetchedModel.name || ''}`.toLowerCase();
+        const supportedEndpointTypes = Array.isArray(fetchedModel.raw?.supported_endpoint_types)
+            ? fetchedModel.raw.supported_endpoint_types.map((type) => String(type || '').toLowerCase())
+            : Array.isArray(fetchedModel.supported_endpoint_types)
+                ? fetchedModel.supported_endpoint_types.map((type) => String(type || '').toLowerCase())
+                : [];
+        if (supportedEndpointTypes.length === 1) {
+            if (supportedEndpointTypes[0] === 'gemini') return 'google';
+            if (supportedEndpointTypes[0] === 'openai') return 'openai';
+        }
         if (
             fingerprint.includes('gpt-') ||
             fingerprint.includes('gpt ') ||
@@ -268,6 +297,16 @@ export function createSettingsControllerApi({
                 normalizeModelTaskType(model.taskType, model) === normalizeModelTaskType(taskType, model) &&
                 normalizeModelProtocol(model.protocol, model, provider) === protocol;
         }) || null;
+    }
+
+    function modelAlreadyExists(providerId, modelId, protocol, taskType = '') {
+        return state.models.some((model) => {
+            if (model.modelId !== modelId) return false;
+            if (!getModelProviderIds(model).includes(providerId)) return false;
+            const provider = state.providers.find((candidate) => candidate.id === providerId) || getResolvedModelProvider(model);
+            if (normalizeModelProtocol(model.protocol, model, provider) !== protocol) return false;
+            return !taskType || normalizeModelTaskType(model.taskType, model) === normalizeModelTaskType(taskType, model);
+        });
     }
 
     function addFetchedModel(provider, fetchedModel) {
@@ -641,26 +680,27 @@ export function createSettingsControllerApi({
             await ensureAllowedHostForProvider(provider);
             if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
 
-            const headers = protocol === 'openai' && provider.apikey
-                ? getProxyHeaders(url, 'GET', {
-                    Accept: 'application/json',
-                    Authorization: `Bearer ${provider.apikey}`,
-                    'x-proxy-timeout': String(MODEL_FETCH_TIMEOUT_SECONDS)
-                })
-                : getProxyHeaders(url, 'GET', {
-                    Accept: 'application/json',
-                    'x-proxy-timeout': String(MODEL_FETCH_TIMEOUT_SECONDS)
-                });
             modelFetchDialogState.status = '正在请求供应商模型列表...';
             renderProviderModelsDialog();
-            const response = await fetchWithTimeout('/proxy', {
+            const response = await fetchWithTimeout('/api/provider_models', {
                 method: 'POST',
-                headers
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url,
+                    protocol,
+                    apikey: provider.apikey || '',
+                    proxy: state.proxy || null,
+                    allowPrivateNetworkTargets: !!state.allowPrivateNetworkTargets
+                })
             }, MODEL_FETCH_CLIENT_TIMEOUT_SECONDS, `获取模型列表超时（${MODEL_FETCH_CLIENT_TIMEOUT_SECONDS} 秒）。请检查供应商地址、密钥、代理设置或该供应商的 /models 接口是否可用`);
             if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
             modelFetchDialogState.status = '正在解析供应商返回...';
             renderProviderModelsDialog();
-            const responseText = await response.text();
+            const responseText = await readResponseTextWithTimeout(
+                response,
+                MODEL_FETCH_CLIENT_TIMEOUT_SECONDS,
+                `读取模型列表响应超时（${MODEL_FETCH_CLIENT_TIMEOUT_SECONDS} 秒）。供应商已经响应，但本地代理返回体没有正常结束，请重启 CainFlow 后重试`
+            );
             if (!response.ok) {
                 throw new Error(responseText || `请求失败 (${response.status})`);
             }
@@ -684,6 +724,7 @@ export function createSettingsControllerApi({
             if (requestId !== activeModelFetchRequestId || modelFetchDialogState.providerId !== providerId) return;
             const message = error?.message || String(error);
             modelFetchDialogState.error = `获取失败：${message}`;
+            modelFetchDialogState.models = [];
             modelFetchDialogState.status = '';
             modelFetchDialogState.loading = false;
             renderProviderModelsDialog();

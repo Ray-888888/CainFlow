@@ -36,7 +36,11 @@ def write_text(handler, text, status=200, headers=None, content_type='text/plain
 
 
 def write_bytes(handler, body, status=200, content_type='application/octet-stream', headers=None):
-    response_headers = {'Content-Type': content_type}
+    response_headers = {
+        'Content-Type': content_type,
+        'Content-Length': str(len(body)),
+        'Connection': 'close',
+    }
     if headers:
         response_headers.update(headers)
 
@@ -45,6 +49,7 @@ def write_bytes(handler, body, status=200, content_type='application/octet-strea
         for key, value in response_headers.items():
             handler.send_header(key, value)
         handler.end_headers()
+        handler.close_connection = True
         handler.wfile.write(body)
     except Exception as error:
         set_response_data(

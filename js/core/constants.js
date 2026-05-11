@@ -1,7 +1,7 @@
 ﻿/**
  * 定义应用版本、仓库信息、存储键名与默认配置等前端共享常量。
  */
-export const APP_VERSION = 'v2.7.9';
+export const APP_VERSION = 'v2.7.9.1';
 export const GITHUB_REPO = 'RingoCaviar/CainFlow';
 export const STORAGE_KEY = 'nodeflow_ai_state';
 
@@ -15,7 +15,7 @@ export const DEFAULT_PROVIDERS = [
     {
         id: 'prov_gxp',
         name: 'GXP',
-        type: 'google',
+        type: 'openai',
         apikey: '',
         endpoint: 'https://www.6789api.top/',
         autoComplete: true
