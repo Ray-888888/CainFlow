@@ -1,14 +1,14 @@
 /**
  * 负责日志面板的数据整理、渲染与错误详情展示，统一处理执行日志输出。
  */
-import { sanitizeDetails, sanitizeRequestPayload, sanitizeRequestUrl } from '../../services/api-client.js';
+import { sanitizeDetails, sanitizeRequestUrl } from '../../services/api-client.js';
 
 export function createLogPanelApi({ state, elements, renderErrorModal }) {
     function logRequestToPanel(title, url, requestBody, extra = {}) {
         addLog('info', title, `正在发送请求到 ${sanitizeRequestUrl(url)}`, {
-            url: sanitizeRequestUrl(url),
+            url,
             ...extra,
-            requestBody: sanitizeRequestPayload(requestBody)
+            requestBody
         });
     }
 

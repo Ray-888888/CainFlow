@@ -102,6 +102,7 @@ export function createClipboardControllerApi({
             serialized.distance = Number(node.data?.distance ?? 6.5);
             serialized.fov = Number(node.data?.fov ?? 50);
             serialized.roll = Number(node.data?.roll ?? 0);
+            serialized.cameraViewMode = node.data?.cameraViewMode === 'thirdPerson' ? 'thirdPerson' : 'firstPerson';
             serialized.text = node.data?.text || node.data?.cameraPrompt || '';
             serialized.cameraPrompt = serialized.text;
             serialized.cameraPreviewImage = node.data?.cameraPreviewImage || '';

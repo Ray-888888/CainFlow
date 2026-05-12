@@ -425,7 +425,7 @@ function renderImageGeneratePreviewState(nodeId, {
     }
 
     function getCachedOutputValue(node, portName) {
-        if (!node) return undefined;
+        if (!node || node.enabled === false) return undefined;
         if (portName === 'image' && node.type === 'ImageImport') {
             return getImageImportOutputValue(node);
         }

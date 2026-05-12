@@ -580,7 +580,8 @@ export function createNodeLifecycleApi({
                 yaw: defaults.yaw ?? 28,
                 distance: defaults.distance ?? 6.5,
                 fov: defaults.fov ?? 50,
-                roll: defaults.roll ?? 0
+                roll: defaults.roll ?? 0,
+                cameraViewMode: defaults.cameraViewMode === 'thirdPerson' ? 'thirdPerson' : 'firstPerson'
             };
         }
         if (!defaults.apiConfigId && !defaults.providerId) return null;
@@ -688,6 +689,7 @@ export function createNodeLifecycleApi({
             nodeData.data.distance = Number.isFinite(Number(effectiveRestoreData?.distance)) ? Number(effectiveRestoreData.distance) : 6.5;
             nodeData.data.fov = Number.isFinite(Number(effectiveRestoreData?.fov)) ? Number(effectiveRestoreData.fov) : 50;
             nodeData.data.roll = Number.isFinite(Number(effectiveRestoreData?.roll)) ? Number(effectiveRestoreData.roll) : 0;
+            nodeData.data.cameraViewMode = effectiveRestoreData?.cameraViewMode === 'thirdPerson' ? 'thirdPerson' : 'firstPerson';
             nodeData.data.text = effectiveRestoreData?.cameraPrompt || effectiveRestoreData?.text || '';
             nodeData.data.cameraPrompt = nodeData.data.text;
             nodeData.data.cameraPreviewImage = effectiveRestoreData?.cameraPreviewImage || '';
@@ -1031,6 +1033,9 @@ export function createNodeLifecycleApi({
         });
 
         showToast(targetState ? `已启用 ${editableIds.length} 个节点` : `已禁用 ${editableIds.length} 个节点`, 'info');
+        updateAllConnections();
+        updatePortStyles();
+        onConnectionsChanged();
         scheduleSave();
     }
 

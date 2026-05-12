@@ -472,7 +472,7 @@ export function createNodeDomBindingsApi({
         }
         if (!state.nodeDefaults[type] || typeof state.nodeDefaults[type] !== 'object') {
             state.nodeDefaults[type] = type === 'CameraControl'
-                ? { pitch: 12, yaw: 28, distance: 6.5, fov: 50, roll: 0 }
+                ? { pitch: 12, yaw: 28, distance: 6.5, fov: 50, roll: 0, cameraViewMode: 'firstPerson' }
                 : { apiConfigId: '', providerId: '' };
         }
         return state.nodeDefaults[type];
@@ -521,6 +521,7 @@ export function createNodeDomBindingsApi({
             defaults.distance = Number(node?.data?.distance ?? defaults.distance ?? 6.5);
             defaults.fov = Number(node?.data?.fov ?? defaults.fov ?? 50);
             defaults.roll = Number(node?.data?.roll ?? defaults.roll ?? 0);
+            defaults.cameraViewMode = node?.data?.cameraViewMode === 'thirdPerson' ? 'thirdPerson' : 'firstPerson';
             return;
         }
         const modelSelect = documentRef.getElementById(`${id}-apiconfig`);

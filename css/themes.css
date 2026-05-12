@@ -1600,6 +1600,24 @@ html[data-app-theme="light"] .camera-control-editor-reset {
     color: var(--text-secondary);
 }
 
+html[data-app-theme="light"] .camera-control-view-mode-btn {
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(148, 163, 184, 0.3);
+    color: var(--text-secondary);
+}
+
+html[data-app-theme="light"] .camera-control-view-mode-btn:hover {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: rgba(79, 70, 229, 0.26);
+    color: var(--text-primary);
+}
+
+html[data-app-theme="light"] .camera-control-view-mode-btn.active {
+    background: rgba(79, 70, 229, 0.14);
+    border-color: rgba(79, 70, 229, 0.42);
+    color: #312e81;
+}
+
 html[data-app-theme="light"] .camera-control-open-btn:hover,
 html[data-app-theme="light"] .camera-control-editor-close:hover,
 html[data-app-theme="light"] .camera-control-editor-reset:hover {

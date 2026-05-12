@@ -136,6 +136,7 @@ export function createWorkflowRunnerApi({
                 roll: node.data.roll,
                 text: node.data.text,
                 cameraPrompt: node.data.cameraPrompt,
+                cameraViewMode: node.data.cameraViewMode,
                 cameraPreviewImage: node.data.cameraPreviewImage
             };
         }
@@ -198,11 +199,17 @@ export function createWorkflowRunnerApi({
         return images.length > 0 ? images : null;
     }
 
+    function getEnabledNodeOutputValue(fromNode, toNode, portName) {
+        if (!fromNode || fromNode.enabled === false) return undefined;
+        return getImageGenerateOutputForTarget(fromNode, toNode) || getCachedOutputValue(fromNode, portName);
+    }
+
     function hasPromptInputValue(plan, nodeId) {
         for (const connection of plan.inputConnectionsByNode[nodeId] || []) {
             if (connection.to.port !== 'prompt') continue;
             const fromNode = state.nodes.get(connection.from.nodeId);
-            const promptValue = getCachedOutputValue(fromNode, connection.from.port);
+            const toNode = state.nodes.get(nodeId);
+            const promptValue = getEnabledNodeOutputValue(fromNode, toNode, connection.from.port);
             if (typeof promptValue === 'string' && promptValue.trim()) return true;
             if (promptValue !== undefined && promptValue !== null && promptValue !== '') return true;
             if (isPromptProducedDuringPlan(plan, nodeId, connection)) return true;
@@ -216,7 +223,7 @@ export function createWorkflowRunnerApi({
         for (const connection of plan.inputConnectionsByNode[nodeId] || []) {
             const fromNode = state.nodes.get(connection.from.nodeId);
             const toNode = state.nodes.get(nodeId);
-            const outputValue = getImageGenerateOutputForTarget(fromNode, toNode) || getCachedOutputValue(fromNode, connection.from.port);
+            const outputValue = getEnabledNodeOutputValue(fromNode, toNode, connection.from.port);
             if (outputValue !== undefined) {
                 inputs[connection.to.port] = outputValue;
             }

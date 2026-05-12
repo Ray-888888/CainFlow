@@ -29,6 +29,7 @@
 - `CameraControl` 的编辑器只是一层临时壳：点击“编辑视角”时才显示 3D 界面，关闭后要把缩略图和相机参数留在 `node.data` 里；运行态重置不应把 `pitch` / `yaw` / `distance` / `fov` / `roll`、摄影提示词或预览图清空。
 - `ImageSave` 如果接到 `ImageGenerate` 的多图结果，节点内预览不再只看最后一张：多图批量保存与预览切换都视为固定结构节点的一部分，增减按钮、计数器或预览层时要同步复查默认高度、最小尺寸测量和节点内滚动条是否重新出现。
 - `CameraControl` 编辑器里的滑块、数值输入框、单位标记、重置视角按钮和浅色主题覆盖也属于固定结构 UI；调整其中任一项时，要连同顶部操作区、舞台、提示词框和共享测量链一起检查，避免缩小节点或切换主题后重新出现重叠、颜色失衡或点击热区异常。
+- `CameraControl` 编辑器的第一人称/第三人称视图切换属于 3D 预览逻辑，不属于节点模板层。第一人称渲染受控相机；第三人称用独立观察相机渲染，并显示世界中的受控摄像机模型和视锥。第三人称下鼠标左键、滚轮和右键重置只调整观察相机，右侧参数才控制受控摄像机。
 
 ### 工作流重命名约定
 
@@ -74,9 +75,9 @@
 | 区域 | 主要文件 | 作用 |
 | --- | --- | --- |
 | **执行引擎** | | |
-| 执行核心 | `js/features/execution/execution-core.js` | 单节点执行处理、API 请求发起、图片类节点输出分发、ImageGenerate 多次生成成功计数；Text 节点运行时只同步文本输入/输出，不自动改变节点尺寸 |
+| 执行核心 | `js/features/execution/execution-core.js` | 单节点执行处理、API 请求发起、图片类节点输出分发、ImageGenerate 多次生成成功计数；Text 节点运行时只同步文本输入/输出，不自动改变节点尺寸；`getCachedOutputValue` 必须把禁用节点视为没有输出 |
 | 提供商请求工具 | `js/features/execution/provider-request-utils.js` | 针对不同 API 提供商的请求拼装、协议判断、模型用途/协议归一化、OpenAI/Gemini 图片分辨率预设、OpenAI 图片接口路径选择 |
-| 工作流运行器 | `js/features/execution/workflow-runner.js` | 整体工作流执行流程编排、自动重试、节点运行态重置；维护 `state.runningNodeIds`、并发运行会话和停止全部当前运行的 abort controller 集合 |
+| 工作流运行器 | `js/features/execution/workflow-runner.js` | 整体工作流执行流程编排、自动重试、节点运行态重置；维护 `state.runningNodeIds`、并发运行会话和停止全部当前运行的 abort controller 集合；收集下游输入和提示词预检查时必须过滤禁用上游输出 |
 | **帮助** | | |
 | 帮助面板 | `js/features/help/help-panel.js` | 操作帮助文档内容、帮助面板打开关闭与交互 |
 | **历史记录** | | |
@@ -90,10 +91,10 @@
 | 日志面板 | `js/features/logs/log-panel.js` | 日志面板 UI、日志渲染、错误详情入口 |
 | **媒体** | | |
 | 图片绘制 | `js/features/media/image-painter.js` | Canvas 图片绘制与合成 |
-| 媒体控制 | `js/features/media/media-controller.js` | 媒体资源生命周期管理、图片预览/保存/缩放/对比节点的运行态同步与交互；`ImageSave` 多图预览切换、当前预览图全屏、手动/自动批量保存与编号文件名；图片对比高级模式的全屏界面、A/B 选图、历史图片汇总、缩略图选择区展开、鼠标切割、滚轮缩放与左键平移；提供文件导入与 data URL 直接写入入口 |
+| 媒体控制 | `js/features/media/media-controller.js` | 媒体资源生命周期管理、图片预览/保存/缩放/对比节点的运行态同步与交互；`ImageSave` 多图预览切换、当前预览图全屏、手动/自动批量保存与编号文件名；图片对比高级模式的全屏界面、A/B 选图、历史图片汇总、缩略图选择区展开、鼠标切割、滚轮缩放与左键平移；提供文件导入与 data URL 直接写入入口；图片预览源和下游级联刷新必须跳过禁用节点并向下游传递空输入 |
 | 媒体工具 | `js/features/media/media-utils.js` | 图片格式转换、Blob 处理等工具函数 |
 | **相机** | | |
-| 视角控制 | `js/features/camera/camera-control-node.js` | `CameraControl` 节点的编辑器壳、3D 预览初始化、世界中心坐标轴、重置为正视视角、滑块与手动数值输入的统一状态链，以及相机参数到英文摄影提示词的映射 |
+| 视角控制 | `js/features/camera/camera-control-node.js` | `CameraControl` 节点的编辑器壳、3D 预览初始化、世界中心坐标轴、第一人称/第三人称预览切换、受控相机与观察相机交互、重置为正视视角、滑块与手动数值输入的统一状态链，以及相机参数到英文摄影提示词的映射 |
 | **持久化** | | |
 | 项目导入导出 | `js/features/persistence/project-io.js` | 工作流 JSON 文件导入导出；导出不写入 API 供应商/模型配置，导入时保留当前 API 设置 |
 | 工作流模型引用解析 | `js/features/persistence/workflow-model-resolver.js` | 旧工作流模型 ID 到当前模型配置的自动匹配；缺失模型或供应商引用提示 |
@@ -125,7 +126,7 @@
 | --- | --- | --- |
 | 节点注册中心 | `js/nodes/registry.js` | 节点类型定义注册中心 |
 | 节点 DOM 绑定 | `js/nodes/node-dom-bindings.js` | 节点 DOM 事件绑定与输入监听、节点内控件值归一化；Text / TextSplit 节点编辑和右下角快速缩放时只同步数据与保存，不接入 textarea ResizeObserver shrink；可输入 textarea 的手动高度在这里通过 `textareaHeights` 记录并触发保存；TextSplit 节点在这里根据分隔结果动态重建输出端口、渲染可滚动节点内预览并清理失效连线；TextChat 回复区滚动与复制按钮事件也在这里接入；ImageGenerate 等可扩展 textarea 只能在真实尺寸变化时触发 fit，点击/聚焦提示词框不得触发 shrink；节点内自定义下拉（用于画布缩放场景）也在这里绑定 |
-| 节点生命周期 | `js/nodes/node-lifecycle.js` | 节点创建、销毁、状态更新；旧 TextInput/TextDisplay 创建时映射为 Text；Text 节点尺寸测量、非文本内容显示不全兜底、Alt 删除保留上下游连接、拖拽晃动摘取节点后的连线保留逻辑在这里；TextSplit 预览区和 TextChat 回复区这类可滚动长内容不得按完整内容撑高最小尺寸；删除、摘取、启用/禁用必须跳过运行中节点 |
+| 节点生命周期 | `js/nodes/node-lifecycle.js` | 节点创建、销毁、状态更新；旧 TextInput/TextDisplay 创建时映射为 Text；Text 节点尺寸测量、非文本内容显示不全兜底、Alt 删除保留上下游连接、拖拽晃动摘取节点后的连线保留逻辑在这里；TextSplit 预览区和 TextChat 回复区这类可滚动长内容不得按完整内容撑高最小尺寸；删除、摘取、启用/禁用必须跳过运行中节点；启用/禁用后要刷新连线、端口状态与依赖预览 |
 | 序列化 | `js/nodes/node-serializer.js` | 节点序列化、会话状态 payload、workflow 导出结构；workflow 导出只含画布、节点、连线和版本号；TextSplit 的 `delimiter` / `removeEmptyLines` / `previewEnabled` / `parts` 以及输入框手动高度缓存 `textareaHeights` 也在这里保存 |
 | 节点视图工厂 | `js/nodes/node-view-factory.js` | 节点 HTML 模板生成，含 Text 文本框、TextSplit 分隔符、删除空行与节点内预览控件、TextChat 回复框内部左上角小复制按钮、ImageGenerate 分辨率与生成次数控件，以及 ImageCompare 高级对比入口按钮；TextSplit 不再渲染内部长文本输入框；ImageGenerate 当前在节点内只显示 `xx/xx` 生成进度，不再显示结果预览；textarea 初始高度从 `textareaHeights` 恢复；节点端口区当前由顶部并排的 `.node-ports-row` 统一生成，输入/输出两列顶部对齐 |
 | 视角控制节点 | `js/nodes/types/camera-control.js` | CameraControl 节点定义、端口、默认尺寸与最小尺寸；固定结构节点不要把最小尺寸散落到私有逻辑里 |
@@ -187,6 +188,7 @@
 | 修改 OpenAI 兼容生图请求路径、参考图上传或请求体格式 | `js/features/execution/provider-request-utils.js`, `js/features/execution/execution-core.js`, `js/services/api-client.js`, `backend/services/proxy_service.py` |
 | 修改生图节点分辨率菜单、OpenAI 自定义分辨率输入 | `js/features/execution/provider-request-utils.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js` |
 | 修改生图节点生成次数、成功计数或失败重试语义 | `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `js/features/execution/execution-core.js`, `js/features/execution/workflow-runner.js` |
+| 修复禁用节点仍影响下游、缓存输出穿透或禁用后预览未断流 | `js/features/execution/workflow-runner.js`, `js/features/execution/execution-core.js`, `js/features/media/media-controller.js`, `js/nodes/node-lifecycle.js` |
 | 修改节点端口位置、输入/输出端口顶部对齐或端口行结构 | `js/nodes/node-view-factory.js`, `css/legacy.css`, `js/canvas/connections.js` |
 | 修复设置面板或代理设置交互 | `js/features/settings/settings-modal.js`, `js/features/settings/settings-controller.js`, `backend/routes/settings_routes.py`, `backend/services/security_service.py` |
 | 修改 API 供应商卡片、获取模型列表弹窗、模型搜索或添加模型到模型管理 | `js/features/settings/settings-controller.js`, `js/services/api-client.js`, `js/features/execution/provider-request-utils.js`, `css/features/settings.css`, `index.css` |
@@ -282,6 +284,8 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - `CameraControl` 这类固定结构工具节点遵循统一责任链：节点定义在 `js/nodes/types/camera-control.js`，模板在 `js/nodes/node-view-factory.js`，DOM 绑定在 `js/nodes/node-dom-bindings.js`，3D 逻辑和 prompt 映射在 `js/features/camera/camera-control-node.js`，共享最小尺寸/显示兜底在 `js/nodes/node-lifecycle.js`，拖拽缩放期的动态最小尺寸约束在 `js/canvas/canvas-interactions.js`，样式在 `css/components/nodes.css`。
 - `CameraControl` 节点的编辑器只在用户点击“编辑视角”时出现；退出编辑后不应继续显示 3D 窗口，以免白白占用渲染压力。缩略图、参数和提示词要保存在 `node.data` 里，并在运行、复制、导出和恢复时保持一致。
 - `CameraControl` 编辑器里的正视重置、世界中心坐标轴、手动数值输入、单位显示和浅色主题覆盖继续分别收口在 `js/features/camera/camera-control-node.js`、`css/components/nodes.css` 与 `css/themes.css`；不要把浅色专属规则或运行态逻辑散回模板层。
+- `CameraControl` 第三人称预览有两套相机：受控相机用于生成/提示词参数，观察相机只用于编辑器观察。切换模式、重置视角或渲染前要同步辅助摄像机显隐、`CameraHelper` 和摄像机模型，并在更新受控相机姿态后调用 `updateMatrixWorld(true)`，避免首帧摄像机缺失、辅助物残留或 helper 旋转读旧矩阵。
+- `CameraControl` 编辑器遮罩关闭要区分真实空白点击和控件交互副作用。提示词 textarea 原生 resize 后的 mouseup/click 可能落在 overlay 上，只应拦截同一次 resize 产生的下一次 overlay click；不要用固定时间窗口，否则用户快速调整高度后会无法立刻点空白关闭。
 - `ImageSave` 如果要处理 `ImageGenerate` 的多图结果，运行态图片列表累积与对保存节点的专门输入分发放 `js/features/execution/execution-core.js` / `js/features/execution/workflow-runner.js`，节点内预览切换、当前图全屏和批量保存交互放 `js/features/media/media-controller.js`；不要在 `js/nodes/types/image-save.js` 或模板层直接拼运行态逻辑。
 - 固定结构节点不要只在“开始拖拽缩放”时记录一次最小尺寸。只要节点宽度变化会影响内部换行、滑块占位或文本框可见高度，就要在缩放过程中重新读取共享测量值，避免缩小后出现滑块和文本、文本和文本框互相压住的回归。
 - 节点内部 spacing 也是共享体验的一部分：标签到控件、控件到控件、最后一组控件到结果区之间的留白需要一致；不要通过给某个字段单独补 margin 的方式修局部问题。

@@ -371,7 +371,8 @@ export function classifyProviderError(status, body, context = {}) {
     };
 }
 
-export function sanitizeRequestPayload(payload) {
+export function sanitizeRequestPayload(payload, options = {}) {
+    const { truncate = true } = options;
     if (!payload || typeof payload !== 'object') return payload;
     try {
         const copy = JSON.parse(JSON.stringify(payload));
@@ -390,7 +391,7 @@ export function sanitizeRequestPayload(payload) {
                 } else if (typeof value === 'string') {
                     if (value.startsWith('data:image/') && value.length > 500) {
                         obj[key] = '[图片数据已隐藏]';
-                    } else if (value.length > 400) {
+                    } else if (truncate && value.length > 400) {
                         obj[key] = `${value.substring(0, 400)}... [数据过长已截断]`;
                     }
                 } else if (typeof value === 'object' && value !== null) {
@@ -442,9 +443,10 @@ export function getAbortMessage(state) {
         : '用户终止了工作流';
 }
 
-export function sanitizeDetails(details) {
+export function sanitizeDetails(details, options = {}) {
+    const { truncate = true } = options;
     if (!details) return null;
-    if (typeof details === 'string' && details.length > 1200) {
+    if (typeof details === 'string' && truncate && details.length > 1200) {
         const sanitized = sanitizeRequestUrl(details);
         return `${sanitized.substring(0, 1200)}... [数据过长已截断]`;
     }
@@ -461,7 +463,7 @@ export function sanitizeDetails(details) {
                             obj[key] = '[图片数据已隐藏]';
                         } else if (key.toLowerCase().includes('url')) {
                             obj[key] = sanitizeRequestUrl(obj[key]);
-                        } else if (obj[key].length > 400) {
+                        } else if (truncate && obj[key].length > 400) {
                             obj[key] = `${sanitizeRequestUrl(obj[key]).substring(0, 400)}... [数据过长已截断]`;
                         } else {
                             obj[key] = sanitizeRequestUrl(obj[key]);

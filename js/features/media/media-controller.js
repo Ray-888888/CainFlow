@@ -51,7 +51,7 @@ export function createMediaControllerApi({
     }
 
     function getNodePreviewSourceData(node) {
-        if (!node) return null;
+        if (!node || node.enabled === false) return null;
         if (node.type === 'ImageImport') {
             return node.importMode === 'url'
                 ? (node.imageUrl || null)
@@ -515,6 +515,10 @@ export function createMediaControllerApi({
         for (const nodeId of dependents) {
             const node = getNodeById(nodeId);
             if (!node) continue;
+            if (node.enabled === false) {
+                await refreshDependentImageResizePreviews(nodeId, { ...options, sourceImage: null }, visited);
+                continue;
+            }
 
             if (node.type === 'ImageResize') {
                 await refreshImageResizePreview(nodeId, { ...options, sourceImage, cascade: false });

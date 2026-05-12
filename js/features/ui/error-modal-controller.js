@@ -1,3 +1,5 @@
+import { sanitizeDetails } from '../../services/api-client.js';
+
 /**
  * 负责错误弹窗的展示、关闭、图片提取预览与完整日志展开逻辑。
  */
@@ -47,6 +49,7 @@ export function createErrorModalControllerApi({
         if (detailEl) {
             detailEl.textContent = detail || '无详细信息';
             detailEl.classList.toggle('hidden', !detail);
+            detailEl.scrollTop = 0;
         }
         detailLabelEl?.classList.toggle('hidden', !detail);
 
@@ -82,15 +85,12 @@ export function createErrorModalControllerApi({
                 btnFull.classList.remove('hidden');
                 btnFull.onclick = (e) => {
                     e.preventDefault();
-                    let fullText = log.rawDetails;
-                    if (typeof fullText !== 'string') {
-                        try {
-                            fullText = JSON.stringify(fullText, null, 2);
-                        } catch (error) {
-                            fullText = String(fullText);
-                        }
-                    }
-                    showErrorModal(title, msg, fullText, modalTitle, null);
+                    const fullText = sanitizeDetails(log.rawDetails, { truncate: false }) || String(log.rawDetails || '');
+                    showErrorModal(title, msg, fullText, modalTitle, {
+                        type: log.type,
+                        userFacing: log.userFacing || null,
+                        rawDetails: null
+                    });
                 };
             } else {
                 btnFull.classList.add('hidden');
