@@ -10,6 +10,7 @@ export function createUpdateManager({
     showToast,
     renderGeneralSettings,
     exportWorkflow,
+    floatingNoticesApi = null,
     documentRef = document,
     windowRef = window,
     localStorageRef = localStorage,
@@ -76,36 +77,43 @@ export function createUpdateManager({
         if (btnBackup) {
             btnBackup.onclick = () => {
                 exportWorkflow();
-                showToast('备份已导出，您可以放心更新', 'success');
+                showToast('当前工作流备份已导出，请仍手动备份 workflows 文件夹', 'success', 5000);
             };
         }
     }
 
     function showUpdateCanvasNotice(releaseData) {
-        const notice = documentRef.getElementById('update-canvas-notice');
-        const latestVersion = documentRef.getElementById('update-canvas-version');
-        const currentVersion = documentRef.getElementById('update-canvas-current-version');
-        const detailsBtn = documentRef.getElementById('btn-update-canvas-details');
-        const downloadBtn = documentRef.getElementById('btn-update-canvas-download');
         const settingsBtn = documentRef.getElementById('btn-settings');
 
         if (settingsBtn) settingsBtn.classList.add('has-update');
-        if (!notice) return;
-
-        if (latestVersion) latestVersion.textContent = releaseData.tag_name || '';
-        if (currentVersion) currentVersion.textContent = appVersion;
-        if (detailsBtn) detailsBtn.onclick = () => showUpdateModal(releaseData);
-        if (downloadBtn) {
-            downloadBtn.onclick = () => {
-                windowRef.open(releaseData.html_url || `https://github.com/${githubRepo}/releases/latest`, '_blank');
-            };
-        }
-
-        notice.classList.remove('hidden');
+        floatingNoticesApi?.upsertNotice({
+            id: 'update-canvas',
+            elementId: 'update-canvas-notice',
+            priority: 30,
+            className: 'update-canvas-notice',
+            role: 'alert',
+            icon: '↑',
+            title: ['发现新版本 ', { tag: 'span', text: releaseData.tag_name || '' }],
+            meta: ['当前版本 ', { tag: 'span', text: appVersion }],
+            actions: [
+                {
+                    id: 'btn-update-canvas-details',
+                    label: '更新通知',
+                    onClick: () => showUpdateModal(releaseData)
+                },
+                {
+                    id: 'btn-update-canvas-download',
+                    label: '下载',
+                    onClick: () => {
+                        windowRef.open(releaseData.html_url || `https://github.com/${githubRepo}/releases/latest`, '_blank');
+                    }
+                }
+            ]
+        });
     }
 
     function hideUpdateCanvasNotice() {
-        documentRef.getElementById('update-canvas-notice')?.classList.add('hidden');
+        floatingNoticesApi?.hideNotice('update-canvas');
         documentRef.getElementById('btn-settings')?.classList.remove('has-update');
     }
 
@@ -295,19 +303,11 @@ export function createUpdateManager({
     }
 
     function checkRefreshNotice() {
-        if (localStorageRef.getItem('cainflow_refresh_notice_dismissed') === 'true') {
-            const notice = documentRef.getElementById('refresh-notice');
-            if (notice) notice.classList.add('hidden');
-        }
+        localStorageRef.removeItem('cainflow_refresh_notice_dismissed');
     }
 
     function initRefreshNotice() {
-        const closeBtn = documentRef.querySelector('.notice-close');
-        closeBtn?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            documentRef.getElementById('refresh-notice')?.classList.add('hidden');
-            localStorageRef.setItem('cainflow_refresh_notice_dismissed', 'true');
-        });
+        checkRefreshNotice();
     }
 
     return {

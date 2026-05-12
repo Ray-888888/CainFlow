@@ -61,10 +61,11 @@ import { createThemeControllerApi } from './js/features/ui/theme-controller.js';
 import { applyGlobalAnimationSetting as applyGlobalAnimationSettingService } from './js/features/ui/animation-controller.js';
 import { createToolbarControllerApi } from './js/features/ui/toolbar-controller.js';
 import { createToastControllerApi } from './js/features/ui/toast-controller.js';
+import { createFloatingNoticesController } from './js/features/ui/floating-notices-controller.js';
 import { createLogPanelApi } from './js/features/logs/log-panel.js';
 import { createStartupControllerApi } from './js/features/app/startup-controller.js';
 import { createSettingsModalApi } from './js/features/settings/settings-modal.js';
-import { createSettingsControllerApi } from './js/features/settings/settings-controller.js?v=2.7.9.4-model-fetch-fix';
+import { createSettingsControllerApi } from './js/features/settings/settings-controller.js?v=2.7.9.5-model-fetch-fix';
 import { createUpdateManager } from './js/features/update/update-manager.js';
 import { createHelpPanelApi } from './js/features/help/help-panel.js';
 import { createWorkflowManagerApi } from './js/features/workflow/workflow-manager.js';
@@ -240,6 +241,7 @@ let runtimeControllerApi = null;
 let startupControllerApi = null;
 let errorModalControllerApi = null;
 let toastControllerApi = null;
+let floatingNoticesApi = null;
 let themeControllerApi = null;
 let promptLibraryApi = null;
 
@@ -294,13 +296,47 @@ function getHistoryFullscreenApi() {
     return historyFullscreenApi;
 }
 
+function getFloatingNoticesApi() {
+    if (!floatingNoticesApi) {
+        floatingNoticesApi = createFloatingNoticesController({
+            container: elements.floatingNoticesContainer
+        });
+    }
+    return floatingNoticesApi;
+}
+
+function initFloatingNotices() {
+    const notices = getFloatingNoticesApi();
+
+    notices.upsertNotice({
+        id: 'workflow-backup',
+        priority: 10,
+        className: 'workflow-backup-notice',
+        icon: '!',
+        content: ['及时备份 ', { code: true, text: 'workflows' }, ' 里的工作流，防止更新后丢失'],
+        dismissible: true,
+        closeLabel: '关闭工作流备份提醒'
+    });
+
+    notices.upsertNotice({
+        id: 'refresh-tip',
+        elementId: 'refresh-notice',
+        priority: 20,
+        icon: '💡',
+        content: ['本APP更新频繁，建议使用 ', { highlight: true, text: 'Ctrl + F5' }, ' 强制刷新以加载最新版'],
+        dismissible: true,
+        closeLabel: '关闭刷新提示'
+    });
+}
+
 const updateManager = createUpdateManager({
     appVersion: APP_VERSION,
     githubRepo: GITHUB_REPO,
     getProxyHeaders,
     showToast,
     renderGeneralSettings: () => settingsControllerApi?.renderGeneralSettings(),
-    exportWorkflow: () => exportWorkflow()
+    exportWorkflow: () => exportWorkflow(),
+    floatingNoticesApi: getFloatingNoticesApi()
 });
 const helpPanelApi = createHelpPanelApi({
     canvasContainer,
@@ -928,11 +964,11 @@ historyPreviewApi = createHistoryPreviewApi({
 });
 
 function initFeatureModules() {
+    initFloatingNotices();
     settingsControllerApi.initSettingsUI({ settingsModalApi });
     historyPreviewApi.initHistoryPreview();
     getHistoryFullscreenApi().initHistoryFullscreen();
     helpPanelApi.initHelpPanel();
-    updateManager.initRefreshNotice();
     workflowManagerApi.initWorkflow();
     getPromptLibraryApi().initPromptLibrary();
     initCache();

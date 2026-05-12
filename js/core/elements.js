@@ -8,6 +8,7 @@ export function createElements(doc = document) {
         connectionsGroup: doc.getElementById('connections-group'),
         tempConnection: doc.getElementById('temp-connection'),
         originAxes: doc.getElementById('origin-axes'),
+        floatingNoticesContainer: doc.getElementById('floating-notices-container'),
         contextMenu: doc.getElementById('context-menu'),
         connectionCreatePopup: doc.getElementById('connection-create-popup'),
         toastContainer: doc.getElementById('toast-container'),

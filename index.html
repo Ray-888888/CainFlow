@@ -42,7 +42,7 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="index.css?v=2.7.9.4">
+    <link rel="stylesheet" href="index.css?v=2.7.9.5">
 </head>
 
 <body>
@@ -166,7 +166,7 @@
                         <path
                             d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
                     </svg>
-                    <span>CainFlow <small class="logo-version">v2.7.9.4</small></span>
+                    <span>CainFlow <small class="logo-version">v2.7.9.5</small></span>
                 </div>
             </div>
             <div class="toolbar-center">
@@ -432,23 +432,7 @@
 
             <!-- Canvas Container -->
             <div id="canvas-container" tabindex="0">
-                <!-- Floating Hard Refresh Tip -->
-                <div id="refresh-notice" class="floating-notice">
-                    <div class="notice-icon">💡</div>
-                    <div class="notice-content">本APP更新频繁，建议使用 <span>Ctrl + F5</span> 强制刷新以加载最新版</div>
-                    <button class="notice-close">&times;</button>
-                </div>
-                <div id="update-canvas-notice" class="floating-notice update-canvas-notice hidden" role="alert">
-                    <div class="notice-icon">↑</div>
-                    <div class="update-canvas-notice-content">
-                        <div class="update-canvas-notice-title">发现新版本 <span id="update-canvas-version"></span></div>
-                        <div class="update-canvas-notice-meta">当前版本 <span id="update-canvas-current-version"></span></div>
-                    </div>
-                    <div class="update-canvas-notice-actions">
-                        <button id="btn-update-canvas-details" type="button">详情</button>
-                        <button id="btn-update-canvas-download" type="button">下载</button>
-                    </div>
-                </div>
+                <div id="floating-notices-container" aria-live="polite"></div>
                 <!-- SVG layer for connections -->
                 <svg id="connections-svg">
                     <defs>
@@ -1025,13 +1009,13 @@
     <div id="modal-update" class="modal-overlay hidden">
         <div class="modal-panel update-modal-panel">
             <div class="modal-header">
-                <h2>🚀 发现新版本！</h2>
+                <h2>🚀 更新通知</h2>
                 <button id="update-modal-close" class="modal-close-btn"
                     onclick="closeModal('modal-update')">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="update-info-header">
-                    <span id="update-tag" class="update-tag-badge">v2.7.9.4</span>
+                    <span id="update-tag" class="update-tag-badge">v2.7.9.5</span>
                     <span class="update-date-text">发布日期: <span id="update-date">2026-04-28</span></span>
                 </div>
                 <div class="update-changelog-container">
@@ -1042,12 +1026,12 @@
                 <div class="update-migration-notice">
                     <div class="notice-icon">⚠️</div>
                     <div class="notice-text">
-                        <strong>数据安全提醒：</strong> 建议在更新前备份您的工作流。您的数据通常存储在浏览器中，但导出为 JSON 文件更保险。
+                        <strong>更新前请务必手动备份：</strong> 更新前一定要手动备份项目 <code>workflows</code> 文件夹里的工作流 JSON。下方导出按钮只能辅助备份当前画布，不能替代复制整个 <code>workflows</code> 目录。
                     </div>
                 </div>
             </div>
             <div class="modal-footer" style="padding: 16px 24px; display: flex; gap: 12px; justify-content: flex-end;">
-                <button id="btn-update-backup" class="btn btn-secondary">立即导出备份</button>
+                <button id="btn-update-backup" class="btn btn-secondary">导出当前工作流备份</button>
                 <button id="btn-update-download" class="btn btn-primary">前往下载最新版</button>
             </div>
         </div>
@@ -1072,7 +1056,7 @@
     </div>
 
     <div id="selection-box" class="hidden"></div>
-    <script type="module" src="js/main.js?v=2.7.9.4-model-fetch-fix"></script>
+    <script type="module" src="js/main.js?v=2.7.9.5-model-fetch-fix"></script>
 </body>
 
 </html>
