@@ -33,10 +33,13 @@ def handle_post(handler):
     name = unquote(handler.path[len('/api/workflows/'):])
     rename_to = handler.headers.get('x-rename-to')
     if rename_to:
-        if rename_workflow(name, unquote(rename_to)):
-            write_text(handler, 'OK')
-        else:
-            write_error(handler, 404, 'Original workflow not found')
+        try:
+            if rename_workflow(name, unquote(rename_to)):
+                write_text(handler, 'OK')
+            else:
+                write_error(handler, 404, 'Original workflow not found')
+        except FileExistsError as exc:
+            write_error(handler, 409, 'Workflow already exists', exc)
         return True
 
     body = read_request_body(handler, default=b'{}')

@@ -50,7 +50,7 @@ export async function renameWorkflowFile(oldName, newName) {
     try {
         const res = await fetch(`/api/workflows/${encodeURIComponent(oldName)}`, {
             method: 'POST',
-            headers: { 'x-rename-to': newName }
+            headers: { 'x-rename-to': encodeURIComponent(newName) }
         });
         if (!res.ok) throw new Error('重命名失败');
         return true;

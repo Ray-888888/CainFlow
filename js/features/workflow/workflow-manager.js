@@ -67,6 +67,44 @@ export function createWorkflowManagerApi({
         return true;
     }
 
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    async function promptRenameWorkflow(oldName) {
+        if (!oldName) return;
+        const input = windowRef.prompt('重命名工作流:', oldName);
+        if (input === null) return;
+
+        const newName = input.trim();
+        if (!newName) {
+            showToast('请输入新的工作流名称', 'warning');
+            return;
+        }
+        if (newName === oldName) {
+            showToast('工作流名称未改变', 'info');
+            return;
+        }
+        if (/[\\/:*?"<>|]/.test(newName)) {
+            showToast('工作流名称不能包含 \\ / : * ? " < > |', 'warning');
+            return;
+        }
+        const names = await fetchWorkflows();
+        if (names.includes(newName)) {
+            showToast(`已存在名为「${newName}」的工作流`, 'warning');
+            return;
+        }
+        if (await renameWorkflowFile(oldName, newName)) {
+            showToast(`工作流「${oldName}」已重命名为「${newName}」`, 'success');
+            renderWorkflowList();
+        }
+    }
+
     async function renderWorkflowList() {
         const list = documentRef.getElementById('workflow-list');
         const names = await fetchWorkflows();
@@ -78,11 +116,14 @@ export function createWorkflowManagerApi({
         }
 
         list.innerHTML = names.map((name) => `
-        <div class="workflow-item" data-name="${name}">
-            <span class="workflow-item-name">${name}</span>
+        <div class="workflow-item" data-name="${escapeHtml(name)}">
+            <span class="workflow-item-name">${escapeHtml(name)}</span>
             <div class="workflow-item-actions">
                 <button class="workflow-action-btn load-btn" title="加载">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                </button>
+                <button class="workflow-action-btn rename-btn" title="重命名">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                 </button>
                 <button class="workflow-action-btn delete delete-btn" title="删除">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -117,6 +158,11 @@ export function createWorkflowManagerApi({
             item.querySelector('.load-btn').onclick = (e) => {
                 e.stopPropagation();
                 item.click();
+            };
+
+            item.querySelector('.rename-btn').onclick = async (e) => {
+                e.stopPropagation();
+                await promptRenameWorkflow(name);
             };
 
             item.querySelector('.delete-btn').onclick = async (e) => {
@@ -237,13 +283,7 @@ export function createWorkflowManagerApi({
         const menu = documentRef.getElementById('workflow-context-menu');
         documentRef.getElementById('menu-rename-workflow')?.addEventListener('click', async () => {
             const oldName = menu.dataset.targetName;
-            const newName = windowRef.prompt('重命名工作流:', oldName);
-            if (newName && newName !== oldName) {
-                if (await renameWorkflowFile(oldName, newName.trim())) {
-                    showToast('已重命名', 'success');
-                    renderWorkflowList();
-                }
-            }
+            await promptRenameWorkflow(oldName);
             menu.classList.add('hidden');
         });
 

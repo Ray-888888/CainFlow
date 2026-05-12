@@ -29,6 +29,8 @@ def rename_workflow(old_name, new_name):
     new_path = get_safe_path(new_name)
     if not old_path or not new_path or not os.path.exists(old_path):
         return False
+    if os.path.exists(new_path):
+        raise FileExistsError('Workflow already exists')
     os.rename(old_path, new_path)
     return True
 
