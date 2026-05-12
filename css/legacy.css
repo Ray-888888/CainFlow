@@ -2007,6 +2007,7 @@ body {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    position: relative;
     cursor: pointer;
     border: 1px solid rgba(255, 255, 255, 0.05);
     flex: 1 1 auto;
@@ -2046,6 +2047,52 @@ body {
     height: 100%;
     object-fit: contain;
     border-radius: var(--radius-sm);
+}
+
+.image-save-preview-nav {
+    position: absolute;
+    top: 50%;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateY(-50%);
+    cursor: pointer;
+    z-index: 2;
+}
+
+.image-save-preview-nav:hover {
+    background: rgba(15, 23, 42, 0.9);
+    border-color: rgba(255, 255, 255, 0.34);
+}
+
+.image-save-preview-prev {
+    left: 8px;
+}
+
+.image-save-preview-next {
+    right: 8px;
+}
+
+.image-save-preview-counter {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    min-width: 38px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+    z-index: 2;
 }
 
 .save-preview-placeholder {

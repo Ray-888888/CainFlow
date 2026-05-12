@@ -2,7 +2,7 @@
 
 当你需要判断代码该放哪里，或者应该先看哪些文件时，使用这份速查表。
 
-> 当前版本：v2.7.9.1
+> 当前版本：v2.7.9.2
 
 ## 近期约定
 
@@ -27,6 +27,15 @@
 - 对浏览器原生滑块、文本框、预览区这类容易出现“视觉高度大于测量高度”的元素，要优先使用稳定块尺寸和明确的 `minHeight`；必要时直接提高节点定义里的 `defaultHeight` / `minHeight`，不要允许缩到必然冲突的尺寸。
 - 新增 3D 预览、媒体舞台、结果画布等 media-like 区域时，要确认它们纳入共享节点测量链，而不是只靠局部 CSS 高度撑住。
 - `CameraControl` 的编辑器只是一层临时壳：点击“编辑视角”时才显示 3D 界面，关闭后要把缩略图和相机参数留在 `node.data` 里；运行态重置不应把 `pitch` / `yaw` / `distance` / `fov` / `roll`、摄影提示词或预览图清空。
+- `ImageSave` 如果接到 `ImageGenerate` 的多图结果，节点内预览不再只看最后一张：多图批量保存与预览切换都视为固定结构节点的一部分，增减按钮、计数器或预览层时要同步复查默认高度、最小尺寸测量和节点内滚动条是否重新出现。
+- `CameraControl` 编辑器里的滑块、数值输入框、单位标记、重置视角按钮和浅色主题覆盖也属于固定结构 UI；调整其中任一项时，要连同顶部操作区、舞台、提示词框和共享测量链一起检查，避免缩小节点或切换主题后重新出现重叠、颜色失衡或点击热区异常。
+
+### 工作流重命名约定
+
+- 工作流重命名的交互入口统一收口在 `js/features/workflow/workflow-manager.js`：列表按钮和右键菜单共用同一套重命名逻辑，不要各写一份。
+- 前端重命名前先做名称校验：空名、同名、非法文件名字符、目标名已存在都应直接提示，避免把无效请求交给后端再兜底。
+- `js/services/workflow-api.js` 负责重命名请求封装；名称通过请求头传递时要做编码，避免中文或特殊字符在链路中出问题。
+- 后端冲突处理放在 `backend/routes/workflow_routes.py` 与 `backend/services/workflow_service.py`：目标工作流已存在时应明确返回冲突，而不是静默覆盖。
 
 ## 前端结构
 
@@ -48,7 +57,7 @@
 | --- | --- | --- |
 | 代理请求 | `js/services/api-client.js` | 上游 API 代理请求封装、User-Agent 注入、`x-allow-private-network-targets` 安全开关透传、代理错误统一中文格式化 |
 | 本地存储 | `js/services/storage-idb.js` | IndexedDB 历史记录持久化 |
-| 工作流文件 API | `js/services/workflow-api.js` | 工作流文件列表、加载、保存等后端接口调用 |
+| 工作流文件 API | `js/services/workflow-api.js` | 工作流文件列表、加载、保存、重命名等后端接口调用；重命名目标名通过请求头编码传递 |
 
 ### Canvas（画布层）
 
@@ -81,10 +90,10 @@
 | 日志面板 | `js/features/logs/log-panel.js` | 日志面板 UI、日志渲染、错误详情入口 |
 | **媒体** | | |
 | 图片绘制 | `js/features/media/image-painter.js` | Canvas 图片绘制与合成 |
-| 媒体控制 | `js/features/media/media-controller.js` | 媒体资源生命周期管理、图片预览/保存/缩放/对比节点的运行态同步与交互；图片对比高级模式的全屏界面、A/B 选图、历史图片汇总、缩略图选择区展开、鼠标切割、滚轮缩放与左键平移；提供文件导入与 data URL 直接写入入口 |
+| 媒体控制 | `js/features/media/media-controller.js` | 媒体资源生命周期管理、图片预览/保存/缩放/对比节点的运行态同步与交互；`ImageSave` 多图预览切换、当前预览图全屏、手动/自动批量保存与编号文件名；图片对比高级模式的全屏界面、A/B 选图、历史图片汇总、缩略图选择区展开、鼠标切割、滚轮缩放与左键平移；提供文件导入与 data URL 直接写入入口 |
 | 媒体工具 | `js/features/media/media-utils.js` | 图片格式转换、Blob 处理等工具函数 |
 | **相机** | | |
-| 视角控制 | `js/features/camera/camera-control-node.js` | `CameraControl` 节点的编辑器壳、3D 预览初始化、轨道控制、相机姿态采样，以及相机参数到英文摄影提示词的映射 |
+| 视角控制 | `js/features/camera/camera-control-node.js` | `CameraControl` 节点的编辑器壳、3D 预览初始化、世界中心坐标轴、重置为正视视角、滑块与手动数值输入的统一状态链，以及相机参数到英文摄影提示词的映射 |
 | **持久化** | | |
 | 项目导入导出 | `js/features/persistence/project-io.js` | 工作流 JSON 文件导入导出；导出不写入 API 供应商/模型配置，导入时保留当前 API 设置 |
 | 工作流模型引用解析 | `js/features/persistence/workflow-model-resolver.js` | 旧工作流模型 ID 到当前模型配置的自动匹配；缺失模型或供应商引用提示 |
@@ -108,7 +117,7 @@
 | **更新** | | |
 | 更新检查 | `js/features/update/update-manager.js` | GitHub Release 版本对比与更新提示 |
 | **工作流** | | |
-| 工作流管理 | `js/features/workflow/workflow-manager.js` | 工作流列表、保存、加载、删除、重命名编排；保存时只写画布、节点、连线和版本号 |
+| 工作流管理 | `js/features/workflow/workflow-manager.js` | 工作流列表、保存、加载、删除、重命名编排；列表按钮与右键菜单共用重命名逻辑，前端负责空名/同名/非法字符/重名校验；保存时只写画布、节点、连线和版本号 |
 
 ### Nodes（节点层）
 
@@ -125,7 +134,7 @@
 | 图片对比节点 | `js/nodes/types/image-compare.js` | ImageCompare 节点定义，包含 A/B 图片输入与 B 图片输出 |
 | 图片预览节点 | `js/nodes/types/image-preview.js` | ImagePreview 节点定义 |
 | 图片缩放节点 | `js/nodes/types/image-resize.js` | ImageResize 节点定义 |
-| 图片保存节点 | `js/nodes/types/image-save.js` | ImageSave 节点定义 |
+| 图片保存节点 | `js/nodes/types/image-save.js` | ImageSave 节点定义、默认尺寸与固定结构节点的基础高度约束 |
 | 对话节点 | `js/nodes/types/text-chat.js` | TextChat 节点定义；回复文本框内部左上角放小复制按钮，长回复在框内滚动，不应撑高节点 |
 | 文本节点 | `js/nodes/types/text.js` | Text 节点正式定义，包含 1 个文本输入口和 1 个文本输出口 |
 | 文本分割节点 | `js/nodes/types/text-split.js` | TextSplit 节点定义，按自定义分隔字符串把上游文本切成多段，并为每段生成独立文本输出口；可开启删除空行和节点内预览，预览区滚动展示且不锁定节点高度 |
@@ -144,12 +153,12 @@
 | 运行时配置 | `backend/config.py` | 端口、路径、运行时目录等配置项 |
 | 运行时状态 | `backend/state.py` | 共享运行时状态与噪音请求过滤 |
 | 设置路由 | `backend/routes/settings_routes.py` | 设置相关 HTTP 请求处理 |
-| 工作流路由 | `backend/routes/workflow_routes.py` | 工作流 CRUD 接口 |
+| 工作流路由 | `backend/routes/workflow_routes.py` | 工作流 CRUD 接口；处理重命名请求与目标已存在冲突返回 |
 | HTTP 工具 | `backend/services/http_helpers.py` | JSON 请求体解析与 JSON / 错误响应 |
 | 日志服务 | `backend/services/log_service.py` | 服务端日志收集与管理 |
 | 代理服务 | `backend/services/proxy_service.py` | 上游代理与请求转发 |
 | 安全服务 | `backend/services/security_service.py` | 允许主机列表、代理检测、安全路径与 URL 校验 |
-| 工作流服务 | `backend/services/workflow_service.py` | 工作流列表、读取、保存、重命名、删除 |
+| 工作流服务 | `backend/services/workflow_service.py` | 工作流列表、读取、保存、重命名、删除；重命名时禁止静默覆盖已有工作流 |
 
 ---
 
@@ -189,7 +198,8 @@
 | 修复日志面板或错误详情 | `js/features/logs/log-panel.js`, `backend/services/log_service.py` |
 | 新增或修改节点类型 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `css/components/nodes.css` |
 | 修复固定结构节点缩放后内容裁剪、文本框显示不全或控件重叠 | `js/nodes/types/*.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `js/nodes/node-view-factory.js`, `css/components/nodes.css` |
-| 新增或修改 `CameraControl` 视角控制节点 | `js/nodes/types/camera-control.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/camera/camera-control-node.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `css/components/nodes.css`, `js/features/execution/execution-core.js`, `js/features/ui/clipboard-controller.js`, `js/features/persistence/project-io.js` |
+| 新增或修改 `CameraControl` 视角控制节点 | `js/nodes/types/camera-control.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/camera/camera-control-node.js`, `js/nodes/node-lifecycle.js`, `js/canvas/canvas-interactions.js`, `css/components/nodes.css`, `css/themes.css`, `js/features/execution/execution-core.js`, `js/features/ui/clipboard-controller.js`, `js/features/persistence/project-io.js` |
+| 修改 `ImageSave` 多图预览/批量保存/自动保存编号文件名 | `js/features/execution/execution-core.js`, `js/features/execution/workflow-runner.js`, `js/features/media/media-controller.js`, `js/nodes/node-view-factory.js`, `js/nodes/types/image-save.js`, `css/legacy.css` |
 | 修改文本节点输入/输出/尺寸行为 | `js/nodes/types/text.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `js/features/execution/execution-core.js`, `js/features/ui/global-interactions.js`, `index.html`, `css/legacy.css` |
 | 修改文本框高度缓存、TextSplit 预览区滚动或 TextChat 回复框布局 | `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/nodes/node-lifecycle.js`, `js/nodes/node-serializer.js`, `js/features/ui/clipboard-controller.js`, `css/legacy.css` |
 | 新增或修改图片对比/预览/缩放/保存类节点 | `js/nodes/types/*.js`, `js/nodes/registry.js`, `js/nodes/node-view-factory.js`, `js/nodes/node-dom-bindings.js`, `js/features/media/media-controller.js`, `js/features/execution/execution-core.js`, `css/components/nodes.css` |
@@ -271,6 +281,8 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - TextSplit 预览区、TextChat 回复区这类节点内长内容必须在节点内部滚动展示，不能把完整内容高度纳入最小尺寸测量；复制按钮等覆盖控件应收在结果框内部，不要额外占用一列布局。
 - `CameraControl` 这类固定结构工具节点遵循统一责任链：节点定义在 `js/nodes/types/camera-control.js`，模板在 `js/nodes/node-view-factory.js`，DOM 绑定在 `js/nodes/node-dom-bindings.js`，3D 逻辑和 prompt 映射在 `js/features/camera/camera-control-node.js`，共享最小尺寸/显示兜底在 `js/nodes/node-lifecycle.js`，拖拽缩放期的动态最小尺寸约束在 `js/canvas/canvas-interactions.js`，样式在 `css/components/nodes.css`。
 - `CameraControl` 节点的编辑器只在用户点击“编辑视角”时出现；退出编辑后不应继续显示 3D 窗口，以免白白占用渲染压力。缩略图、参数和提示词要保存在 `node.data` 里，并在运行、复制、导出和恢复时保持一致。
+- `CameraControl` 编辑器里的正视重置、世界中心坐标轴、手动数值输入、单位显示和浅色主题覆盖继续分别收口在 `js/features/camera/camera-control-node.js`、`css/components/nodes.css` 与 `css/themes.css`；不要把浅色专属规则或运行态逻辑散回模板层。
+- `ImageSave` 如果要处理 `ImageGenerate` 的多图结果，运行态图片列表累积与对保存节点的专门输入分发放 `js/features/execution/execution-core.js` / `js/features/execution/workflow-runner.js`，节点内预览切换、当前图全屏和批量保存交互放 `js/features/media/media-controller.js`；不要在 `js/nodes/types/image-save.js` 或模板层直接拼运行态逻辑。
 - 固定结构节点不要只在“开始拖拽缩放”时记录一次最小尺寸。只要节点宽度变化会影响内部换行、滑块占位或文本框可见高度，就要在缩放过程中重新读取共享测量值，避免缩小后出现滑块和文本、文本和文本框互相压住的回归。
 - 节点内部 spacing 也是共享体验的一部分：标签到控件、控件到控件、最后一组控件到结果区之间的留白需要一致；不要通过给某个字段单独补 margin 的方式修局部问题。
 - 新增 3D 预览区、媒体舞台或其他 media-like 容器时，先确认它们参与节点最小尺寸测量链，再决定节点默认高度和最小高度；不要只在 CSS 里写一个固定高度然后指望共享缩放逻辑自动兼容。

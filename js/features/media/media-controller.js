@@ -71,6 +71,65 @@ export function createMediaControllerApi({
         return typeof value === 'string' && /^https?:\/\//i.test(value);
     }
 
+    function normalizeImageList(value) {
+        if (Array.isArray(value)) {
+            return value.filter((item) => typeof item === 'string' && item.trim());
+        }
+        return typeof value === 'string' && value.trim() ? [value] : [];
+    }
+
+    function getStoredImageSaveList(node) {
+        return normalizeImageList(node?.data?.images || node?.imageDataList || node?.data?.image || node?.imageData);
+    }
+
+    function getGeneratedImageList(node) {
+        const images = normalizeImageList(node?.data?.images || node?.generatedImages);
+        return images.length > 0 ? images : normalizeImageList(node?.data?.image || node?.imageData);
+    }
+
+    function getImageSavePreviewIndex(node, images) {
+        if (!images.length) return 0;
+        const rawIndex = Number.isFinite(node?.imagePreviewIndex) ? node.imagePreviewIndex : 0;
+        return Math.max(0, Math.min(images.length - 1, rawIndex));
+    }
+
+    function renderImageSavePreview(nodeId, images, emptyMessage = '无输入图片') {
+        const previewContainer = documentRef.getElementById(`${nodeId}-save-preview`);
+        const node = getNodeById(nodeId);
+        if (!previewContainer) return;
+
+        const imageList = normalizeImageList(images);
+        if (imageList.length === 0) {
+            previewContainer.classList.remove('has-multiple-images');
+            previewContainer.innerHTML = `<div class="save-preview-placeholder">${escapeHtml(emptyMessage)}</div>`;
+            if (node) node.imagePreviewIndex = 0;
+            return;
+        }
+
+        const index = getImageSavePreviewIndex(node, imageList);
+        if (node) node.imagePreviewIndex = index;
+        const image = imageList[index];
+        previewContainer.classList.toggle('has-multiple-images', imageList.length > 1);
+        previewContainer.innerHTML = `
+            <img src="${image}" alt="待保存 ${index + 1}/${imageList.length}" draggable="false" />
+            ${imageList.length > 1 ? `
+                <button type="button" class="image-save-preview-nav image-save-preview-prev" data-direction="-1" title="上一张" aria-label="上一张">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button type="button" class="image-save-preview-nav image-save-preview-next" data-direction="1" title="下一张" aria-label="下一张">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <div class="image-save-preview-counter">${index + 1}/${imageList.length}</div>
+            ` : ''}
+        `;
+    }
+
+    function getCurrentImageSavePreviewImage(node) {
+        const images = getStoredImageSaveList(node);
+        if (images.length === 0) return null;
+        return images[getImageSavePreviewIndex(node, images)] || images[0];
+    }
+
     function escapeHtml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -316,20 +375,23 @@ export function createMediaControllerApi({
         const node = getNodeById(nodeId);
         if (!node || node.type !== 'ImageSave') return;
 
-        const previewContainer = documentRef.getElementById(`${nodeId}-save-preview`);
         const manualSaveBtn = documentRef.getElementById(`${nodeId}-manual-save`);
         const viewFullBtn = documentRef.getElementById(`${nodeId}-view-full`);
         const resolutionBadge = documentRef.getElementById(`${nodeId}-res`);
 
-        node.imageData = imageData || null;
+        const imageList = normalizeImageList(imageData);
+        const primaryImage = imageList.length > 0 ? imageList[imageList.length - 1] : null;
+
+        node.imageDataList = imageList;
+        node.imageData = primaryImage || null;
         node.data = node.data || {};
 
-        if (isRemoteImageUrl(imageData)) {
+        if (imageList.some((image) => isRemoteImageUrl(image))) {
             node.imageData = null;
+            node.imageDataList = [];
             delete node.data.image;
-            if (previewContainer) {
-                previewContainer.innerHTML = '<div class="save-preview-placeholder">URL 图片不支持保存节点</div>';
-            }
+            delete node.data.images;
+            renderImageSavePreview(nodeId, [], 'URL 图片不支持保存节点');
             if (manualSaveBtn) manualSaveBtn.disabled = true;
             if (viewFullBtn) viewFullBtn.disabled = true;
             if (deleteImageAsset) await deleteImageAsset(nodeId);
@@ -341,20 +403,20 @@ export function createMediaControllerApi({
             return;
         }
 
-        if (imageData) {
-            node.data.image = imageData;
-            if (previewContainer) {
-                previewContainer.innerHTML = `<img src="${imageData}" alt="待保存" draggable="false" />`;
-            }
+        if (primaryImage) {
+            node.data.image = primaryImage;
+            if (imageList.length > 1) node.data.images = imageList.slice();
+            else delete node.data.images;
+            node.imagePreviewIndex = 0;
+            renderImageSavePreview(nodeId, imageList);
             if (manualSaveBtn) manualSaveBtn.disabled = false;
             if (viewFullBtn) viewFullBtn.disabled = false;
-            await saveImageAsset(nodeId, imageData);
-            await showResolutionBadge(nodeId, imageData);
+            await saveImageAsset(nodeId, primaryImage);
+            await showResolutionBadge(nodeId, imageList[0] || primaryImage);
         } else {
             delete node.data.image;
-            if (previewContainer) {
-                previewContainer.innerHTML = '<div class="save-preview-placeholder">无输入图片</div>';
-            }
+            delete node.data.images;
+            renderImageSavePreview(nodeId, [], '无输入图片');
             if (manualSaveBtn) manualSaveBtn.disabled = true;
             if (viewFullBtn) viewFullBtn.disabled = true;
             if (deleteImageAsset) await deleteImageAsset(nodeId);
@@ -467,7 +529,10 @@ export function createMediaControllerApi({
             }
 
             if (node.type === 'ImageSave') {
-                await syncImageSaveNode(nodeId, sourceImage);
+                const imageSaveSource = sourceNode?.type === 'ImageGenerate'
+                    ? getGeneratedImageList(sourceNode)
+                    : sourceImage;
+                await syncImageSaveNode(nodeId, imageSaveSource);
                 await refreshDependentImageResizePreviews(nodeId, options, visited);
                 continue;
             }
@@ -918,24 +983,51 @@ export function createMediaControllerApi({
         const previewContainer = el.querySelector(`#${id}-save-preview`);
         const manualSaveBtn = el.querySelector(`#${id}-manual-save`);
 
+        const stepPreview = (delta, event) => {
+            event?.stopPropagation();
+            const node = getNodeById(id);
+            const images = getStoredImageSaveList(node);
+            if (!node || images.length <= 1) return;
+            const currentIndex = getImageSavePreviewIndex(node, images);
+            node.imagePreviewIndex = (currentIndex + delta + images.length) % images.length;
+            renderImageSavePreview(id, images);
+            void showResolutionBadge(id, images[node.imagePreviewIndex]);
+        };
+
+        previewContainer.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.image-save-preview-nav')) {
+                e.stopPropagation();
+            }
+        });
+
+        previewContainer.addEventListener('click', (e) => {
+            const navButton = e.target.closest('.image-save-preview-nav');
+            if (!navButton) return;
+            stepPreview(parseInt(navButton.dataset.direction || '0', 10) || 0, e);
+        });
+
         manualSaveBtn.addEventListener('click', () => {
             const node = getNodeById(id);
-            if (!node || !node.data.image) return showToast('没有可保存的图片', 'warning');
+            const images = getStoredImageSaveList(node);
+            if (!node || images.length === 0) return showToast('没有可保存的图片', 'warning');
             const filename = el.querySelector(`#${id}-filename`).value || 'image';
             try {
-                const blob = dataURLtoBlob(node.data.image);
-                const pngBlob = new Blob([blob], { type: 'image/png' });
-                const url = URL.createObjectURL(pngBlob);
-                const link = documentRef.createElement('a');
-                link.href = url;
-                link.download = filename + '.png';
-                documentRef.body.appendChild(link);
-                link.click();
-                setTimeout(() => {
-                    documentRef.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                }, 100);
-                showToast('图片已手动保存为 PNG', 'success');
+                images.forEach((image, index) => {
+                    const blob = dataURLtoBlob(image);
+                    const pngBlob = new Blob([blob], { type: 'image/png' });
+                    const url = URL.createObjectURL(pngBlob);
+                    const link = documentRef.createElement('a');
+                    const suffix = images.length > 1 ? `_${String(index + 1).padStart(2, '0')}` : '';
+                    link.href = url;
+                    link.download = `${filename}${suffix}.png`;
+                    documentRef.body.appendChild(link);
+                    link.click();
+                    setTimeout(() => {
+                        documentRef.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                });
+                showToast(images.length > 1 ? `已手动保存 ${images.length} 张图片为 PNG` : '图片已手动保存为 PNG', 'success');
             } catch (err) {
                 console.error('Manual save error:', err);
                 showToast('保存失败: ' + err.message, 'error');
@@ -946,19 +1038,24 @@ export function createMediaControllerApi({
             e.stopPropagation();
             if (state.justDragged) return;
             const node = getNodeById(id);
-            if (node && node.data.image) openFullscreenPreview(node.data.image, id);
+            if (e.target.closest('.image-save-preview-nav')) return;
+            const image = getCurrentImageSavePreviewImage(node);
+            if (image) openFullscreenPreview(image, id);
         });
 
         el.querySelector(`#${id}-view-full`).addEventListener('click', (e) => {
             e.stopPropagation();
             const node = getNodeById(id);
-            if (node && node.data.image) openFullscreenPreview(node.data.image, id);
+            const image = getCurrentImageSavePreviewImage(node);
+            if (image) openFullscreenPreview(image, id);
         });
     }
 
     async function autoSaveToDir(nodeId, dataUrl) {
         const node = getNodeById(nodeId);
         if (!node) return;
+        const images = normalizeImageList(dataUrl);
+        if (images.length === 0) return;
         const handle = state.globalSaveDirHandle;
         if (!handle) {
             showToast('自动保存提醒：尚未在通用设置中选择全局保存目录，图片仅保存在节点内', 'warning', 5000);
@@ -983,15 +1080,20 @@ export function createMediaControllerApi({
             }
             const prefix = documentRef.getElementById(`${nodeId}-filename`)?.value || 'image';
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const filename = `${prefix}_${timestamp}.png`;
-            const blob = dataURLtoBlob(dataUrl);
-            const fileHandle = await handle.getFileHandle(filename, { create: true });
-            if (!fileHandle) throw new Error('无法创建文件');
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            showToast(`图片已自动保存: ${filename}`, 'success');
-            addLog('success', '自动保存成功', `已保存至: ${handle.name}/${filename}`);
+            const savedFilenames = [];
+            for (let index = 0; index < images.length; index += 1) {
+                const suffix = images.length > 1 ? `_${String(index + 1).padStart(2, '0')}` : '';
+                const filename = `${prefix}_${timestamp}${suffix}.png`;
+                const blob = dataURLtoBlob(images[index]);
+                const fileHandle = await handle.getFileHandle(filename, { create: true });
+                if (!fileHandle) throw new Error('无法创建文件');
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                savedFilenames.push(filename);
+            }
+            showToast(images.length > 1 ? `已自动保存 ${images.length} 张图片` : `图片已自动保存: ${savedFilenames[0]}`, 'success');
+            addLog('success', '自动保存成功', `已保存至: ${handle.name}/${savedFilenames.join(', ')}`);
         } catch (err) {
             console.error('Auto-save error:', err);
             showToast('自动保存出错: ' + err.message, 'error', 5000);

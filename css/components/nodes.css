@@ -17,7 +17,8 @@
 }
 
 .camera-control-open-btn,
-.camera-control-editor-close {
+.camera-control-editor-close,
+.camera-control-editor-reset {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -40,20 +41,37 @@
 }
 
 .camera-control-open-btn:hover,
-.camera-control-editor-close:hover {
+.camera-control-editor-close:hover,
+.camera-control-editor-reset:hover {
     background: rgba(99, 102, 241, 0.22);
     border-color: rgba(129, 140, 248, 0.4);
 }
 
 .camera-control-open-btn:active,
-.camera-control-editor-close:active {
+.camera-control-editor-close:active,
+.camera-control-editor-reset:active {
     transform: translateY(1px);
 }
 
 .camera-control-open-btn:focus-visible,
-.camera-control-editor-close:focus-visible {
+.camera-control-editor-close:focus-visible,
+.camera-control-editor-reset:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
+}
+
+.camera-control-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.camera-control-editor-reset {
+    border-color: rgba(148, 163, 184, 0.28);
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-secondary);
 }
 
 .camera-control-node-preview {
@@ -222,10 +240,44 @@
     min-height: 18px;
 }
 
+.camera-control-value-group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
 .camera-control-value {
+    box-sizing: border-box;
+    flex: 0 0 52px;
     color: var(--text-dim);
     font-size: 12px;
-    white-space: nowrap;
+    width: 52px;
+    min-width: 52px;
+    max-width: 52px;
+    min-height: 28px;
+    padding: 4px 5px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.5);
+    text-align: right;
+    font: inherit;
+    line-height: 1.2;
+}
+
+.camera-control-unit {
+    width: 20px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1;
+    text-align: left;
+}
+
+.camera-control-value:focus {
+    outline: none;
+    border-color: rgba(99, 102, 241, 0.62);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
 }
 
 .camera-control-sliders input[type="range"] {
@@ -318,6 +370,14 @@
     .camera-control-editor-header {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .camera-control-editor-actions {
+        width: 100%;
+    }
+
+    .camera-control-editor-actions button {
+        flex: 1 1 0;
     }
 
     .camera-control-editor-close {

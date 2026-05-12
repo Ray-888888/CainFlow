@@ -8,6 +8,14 @@ const DEFAULT_CAMERA_STATE = Object.freeze({
     roll: 0
 });
 
+const FRONT_CAMERA_STATE = Object.freeze({
+    pitch: 0,
+    yaw: 0,
+    distance: DEFAULT_CAMERA_STATE.distance,
+    fov: DEFAULT_CAMERA_STATE.fov,
+    roll: 0
+});
+
 const CAMERA_LIMITS = Object.freeze({
     pitch: { min: -85, max: 85 },
     yaw: { min: -180, max: 180 },
@@ -373,9 +381,9 @@ export function createCameraControlNodeApi({
             const valueEl = editor.valueBadges.get(key);
             if (slider) slider.value = String(stateValues[key]);
             if (valueEl) {
-                valueEl.textContent = key === 'distance'
-                    ? `${roundTo(stateValues[key], 2)}`
-                    : `${roundTo(stateValues[key], 1)} deg`;
+                valueEl.value = key === 'distance'
+                    ? String(roundTo(stateValues[key], 2))
+                    : String(roundTo(stateValues[key], 1));
             }
         });
 
@@ -589,7 +597,7 @@ export function createCameraControlNodeApi({
         subjectGroup.add(frame);
 
         const axis = new THREE.AxesHelper(1.5);
-        axis.position.set(-2.4, -1.1, 0.2);
+        axis.position.copy(subjectGroup.position);
         scene.add(axis);
 
         return {
@@ -623,13 +631,25 @@ export function createCameraControlNodeApi({
     }
 
     function buildEditorMarkup() {
+        const getUnit = (key) => key === 'distance' ? 'cm' : '°';
         const sliderMarkup = SLIDER_KEYS.map((key) => {
             const meta = SLIDER_META[key];
             return `
                 <div class="node-field">
                     <div class="camera-control-slider-header">
                         <label>${meta.label}</label>
-                        <span class="camera-control-value" data-camera-value="${key}"></span>
+                        <span class="camera-control-value-group">
+                            <input
+                                type="number"
+                                class="camera-control-value"
+                                data-camera-value="${key}"
+                                min="${meta.min}"
+                                max="${meta.max}"
+                                step="${meta.step}"
+                                aria-label="${meta.label}"
+                            />
+                            <span class="camera-control-unit">${getUnit(key)}</span>
+                        </span>
                     </div>
                     <input type="range" data-camera-slider="${key}" min="${meta.min}" max="${meta.max}" step="${meta.step}" />
                 </div>
@@ -643,7 +663,16 @@ export function createCameraControlNodeApi({
                         <div class="camera-control-editor-title">编辑视角</div>
                         <div class="camera-control-editor-subtitle">左键拖拽旋转，滚轮调整距离，关闭后不保留实时渲染窗口。</div>
                     </div>
-                    <button type="button" class="camera-control-editor-close">完成</button>
+                    <div class="camera-control-editor-actions">
+                        <button type="button" class="camera-control-editor-reset" title="重置为正视视角">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+                                <path d="M3 3v6h6"></path>
+                            </svg>
+                            重置视角
+                        </button>
+                        <button type="button" class="camera-control-editor-close">完成</button>
+                    </div>
                 </div>
                 <div class="camera-control-editor-content">
                     <div class="camera-control-stage-shell camera-control-editor-stage-shell">
@@ -706,6 +735,7 @@ export function createCameraControlNodeApi({
         const stage = overlay.querySelector('.camera-control-stage');
         const promptTextarea = overlay.querySelector('.camera-control-prompt');
         const closeButton = overlay.querySelector('.camera-control-editor-close');
+        const resetButton = overlay.querySelector('.camera-control-editor-reset');
         const sceneBits = buildScene();
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -721,6 +751,7 @@ export function createCameraControlNodeApi({
             stage,
             promptTextarea,
             closeButton,
+            resetButton,
             returnFocusEl,
             renderer,
             camera,
@@ -763,6 +794,12 @@ export function createCameraControlNodeApi({
             closeCameraControlEditor();
         });
 
+        editor.resetButton?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            applyState(FRONT_CAMERA_STATE, { save: true });
+        });
+
         editor.overlay.addEventListener('click', (event) => {
             event.stopPropagation();
             if (event.target === editor.overlay) {
@@ -787,13 +824,36 @@ export function createCameraControlNodeApi({
 
         SLIDER_KEYS.forEach((key) => {
             const slider = editor.sliders.get(key);
-            if (!slider) return;
-            slider.addEventListener('input', (event) => {
+            const valueInput = editor.valueBadges.get(key);
+            slider?.addEventListener('input', (event) => {
                 event.stopPropagation();
                 applyState({ [key]: Number(slider.value) }, { save: true });
             });
-            slider.addEventListener('change', (event) => event.stopPropagation());
-            slider.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+            slider?.addEventListener('change', (event) => event.stopPropagation());
+            slider?.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+
+            const commitValueInput = (event) => {
+                event.stopPropagation();
+                if (!valueInput) return;
+                const nextValue = Number(valueInput.value);
+                if (!Number.isFinite(nextValue)) {
+                    updateEditorControls(editor);
+                    return;
+                }
+                applyState({ [key]: nextValue }, { save: true });
+            };
+            valueInput?.addEventListener('input', commitValueInput);
+            valueInput?.addEventListener('change', commitValueInput);
+            valueInput?.addEventListener('blur', commitValueInput);
+            valueInput?.addEventListener('keydown', (event) => {
+                event.stopPropagation();
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitValueInput(event);
+                    valueInput.blur();
+                }
+            });
+            valueInput?.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
         });
 
         let dragState = null;

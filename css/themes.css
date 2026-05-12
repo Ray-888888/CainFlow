@@ -1568,6 +1568,92 @@ html[data-app-theme="light"] .error-modal-images img {
     background: #ffffff;
 }
 
+html[data-app-theme="light"] .camera-control-node-preview {
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(237, 242, 249, 0.98));
+    border-color: rgba(148, 163, 184, 0.24);
+}
+
+html[data-app-theme="light"] .camera-control-node-preview.has-image {
+    background: rgba(248, 250, 252, 0.98);
+}
+
+html[data-app-theme="light"] .camera-control-editor-overlay {
+    background: rgba(15, 23, 42, 0.22);
+}
+
+html[data-app-theme="light"] .camera-control-editor-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.98));
+    border-color: rgba(148, 163, 184, 0.26);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+html[data-app-theme="light"] .camera-control-open-btn,
+html[data-app-theme="light"] .camera-control-editor-close {
+    background: rgba(79, 70, 229, 0.09);
+    border-color: rgba(79, 70, 229, 0.22);
+    color: #312e81;
+}
+
+html[data-app-theme="light"] .camera-control-editor-reset {
+    background: rgba(100, 116, 139, 0.08);
+    border-color: rgba(100, 116, 139, 0.24);
+    color: var(--text-secondary);
+}
+
+html[data-app-theme="light"] .camera-control-open-btn:hover,
+html[data-app-theme="light"] .camera-control-editor-close:hover,
+html[data-app-theme="light"] .camera-control-editor-reset:hover {
+    background: rgba(79, 70, 229, 0.14);
+    border-color: rgba(79, 70, 229, 0.32);
+}
+
+html[data-app-theme="light"] .camera-control-stage {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.28);
+}
+
+html[data-app-theme="light"] .camera-control-value {
+    background: rgba(255, 255, 255, 0.86);
+    border-color: rgba(148, 163, 184, 0.34);
+    color: var(--text-primary);
+}
+
+html[data-app-theme="light"] .camera-control-value:focus {
+    border-color: rgba(79, 70, 229, 0.54);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.14);
+}
+
+html[data-app-theme="light"] .camera-control-unit,
+html[data-app-theme="light"] .camera-control-node-preview-placeholder,
+html[data-app-theme="light"] .camera-control-editor-subtitle,
+html[data-app-theme="light"] .camera-control-editor-stage-note {
+    color: var(--text-secondary);
+}
+
+html[data-app-theme="light"] .camera-control-sliders input[type="range"]::-webkit-slider-runnable-track {
+    background: rgba(100, 116, 139, 0.24);
+}
+
+html[data-app-theme="light"] .camera-control-sliders input[type="range"]::-webkit-slider-thumb {
+    background: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(248, 250, 252, 0.96);
+}
+
+html[data-app-theme="light"] .camera-control-sliders input[type="range"]::-moz-range-track {
+    background: rgba(100, 116, 139, 0.24);
+}
+
+html[data-app-theme="light"] .camera-control-sliders input[type="range"]::-moz-range-thumb {
+    background: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(248, 250, 252, 0.96);
+}
+
+html[data-app-theme="light"] .camera-control-prompt {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(148, 163, 184, 0.32);
+    color: var(--text-primary);
+}
+
 @media (max-width: 768px) {
     #btn-theme-toggle {
         min-width: 92px;

@@ -163,6 +163,7 @@ export function createWorkflowRunnerApi({
             node.isSucceeded = false;
             if (node.type === 'ImageGenerate') {
                 node.generationCompletedCount = 0;
+                node.generatedImages = [];
             }
         }
     }
@@ -184,6 +185,19 @@ export function createWorkflowRunnerApi({
         return outputs.some((output) => output.name === connection.from.port && output.type === 'text');
     }
 
+    function normalizeImageList(value) {
+        if (Array.isArray(value)) {
+            return value.filter((item) => typeof item === 'string' && item.trim());
+        }
+        return typeof value === 'string' && value.trim() ? [value] : [];
+    }
+
+    function getImageGenerateOutputForTarget(fromNode, toNode) {
+        if (fromNode?.type !== 'ImageGenerate' || toNode?.type !== 'ImageSave') return null;
+        const images = normalizeImageList(fromNode.data?.images || fromNode.generatedImages);
+        return images.length > 0 ? images : null;
+    }
+
     function hasPromptInputValue(plan, nodeId) {
         for (const connection of plan.inputConnectionsByNode[nodeId] || []) {
             if (connection.to.port !== 'prompt') continue;
@@ -201,7 +215,8 @@ export function createWorkflowRunnerApi({
 
         for (const connection of plan.inputConnectionsByNode[nodeId] || []) {
             const fromNode = state.nodes.get(connection.from.nodeId);
-            const outputValue = getCachedOutputValue(fromNode, connection.from.port);
+            const toNode = state.nodes.get(nodeId);
+            const outputValue = getImageGenerateOutputForTarget(fromNode, toNode) || getCachedOutputValue(fromNode, connection.from.port);
             if (outputValue !== undefined) {
                 inputs[connection.to.port] = outputValue;
             }

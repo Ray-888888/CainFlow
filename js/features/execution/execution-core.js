@@ -488,8 +488,58 @@ function renderImageGeneratePreviewState(nodeId, {
         return typeof value === 'string' && /^https?:\/\//i.test(value);
     }
 
+    function normalizeImageList(value) {
+        if (Array.isArray(value)) {
+            return value.filter((item) => typeof item === 'string' && item.trim());
+        }
+        return typeof value === 'string' && value.trim() ? [value] : [];
+    }
+
+    function hasRemoteImageValue(value) {
+        return normalizeImageList(value).some((image) => isRemoteImageUrl(image));
+    }
+
+    function getStoredGeneratedImages(node, completedCount = 0) {
+        const images = normalizeImageList(node?.data?.images || node?.generatedImages);
+        if (images.length > 0) {
+            return completedCount > 0 ? images.slice(0, completedCount) : images;
+        }
+        return normalizeImageList(node?.data?.image || node?.imageData);
+    }
+
+    function renderImageSavePreview(nodeId, images, emptyMessage = '无输入图片') {
+        const previewContainer = documentRef.getElementById(`${nodeId}-save-preview`);
+        if (!previewContainer) return;
+
+        const imageList = normalizeImageList(images);
+        if (imageList.length === 0) {
+            previewContainer.classList.remove('has-multiple-images');
+            previewContainer.innerHTML = `<div class="save-preview-placeholder">${emptyMessage}</div>`;
+            return;
+        }
+
+        const node = state.nodes.get(nodeId);
+        const rawIndex = Number.isFinite(node?.imagePreviewIndex) ? node.imagePreviewIndex : 0;
+        const index = Math.max(0, Math.min(imageList.length - 1, rawIndex));
+        if (node) node.imagePreviewIndex = index;
+        const image = imageList[index];
+        previewContainer.classList.toggle('has-multiple-images', imageList.length > 1);
+        previewContainer.innerHTML = `
+            <img src="${image}" alt="待保存 ${index + 1}/${imageList.length}" draggable="false" />
+            ${imageList.length > 1 ? `
+                <button type="button" class="image-save-preview-nav image-save-preview-prev" data-direction="-1" title="上一张" aria-label="上一张">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button type="button" class="image-save-preview-nav image-save-preview-next" data-direction="1" title="下一张" aria-label="下一张">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <div class="image-save-preview-counter">${index + 1}/${imageList.length}</div>
+            ` : ''}
+        `;
+    }
+
     function hasRemoteImageInput(inputs = {}) {
-        return Object.values(inputs).some((value) => isRemoteImageUrl(value));
+        return Object.values(inputs).some((value) => hasRemoteImageValue(value));
     }
 
     function getReferenceImageInputs(inputs = {}) {
@@ -639,6 +689,15 @@ function renderImageGeneratePreviewState(nodeId, {
                     generationCount,
                     Math.max(0, parseInt(node.generationCompletedCount || '0', 10) || 0)
                 );
+                node.generatedImages = getStoredGeneratedImages(node, node.generationCompletedCount);
+                if (node.generationCompletedCount <= 0 || node.generatedImages.length === 0) {
+                    node.generatedImages = [];
+                    delete node.data.images;
+                } else {
+                    node.data.images = node.generatedImages.slice();
+                    node.data.image = node.generatedImages[node.generatedImages.length - 1];
+                    node.imageData = node.data.image;
+                }
                 renderImageGeneratePreviewState(id, {
                     current: Math.min(node.generationCompletedCount + 1, generationCount),
                     total: generationCount
@@ -726,6 +785,9 @@ function renderImageGeneratePreviewState(nodeId, {
 
                     node.data.image = imageData;
                     node.imageData = imageData;
+                    node.generatedImages = normalizeImageList(node.generatedImages);
+                    node.generatedImages[nextGenerationIndex - 1] = imageData;
+                    node.data.images = node.generatedImages.slice(0, nextGenerationIndex);
                     node.generationCompletedCount = nextGenerationIndex;
                     renderImageGeneratePreviewState(id, {
                         current: nextGenerationIndex,
@@ -947,25 +1009,31 @@ function renderImageGeneratePreviewState(nodeId, {
         },
         ImageSave: async (node, inputs) => {
             const { id } = node;
-            const imgData = inputs.image;
-            const savePreview = documentRef.getElementById(`${id}-save-preview`);
+            const imageList = normalizeImageList(inputs.image);
+            const imgData = imageList.length > 0 ? imageList[imageList.length - 1] : null;
             const manualSaveBtn = documentRef.getElementById(`${id}-manual-save`);
             const viewFullBtn = documentRef.getElementById(`${id}-view-full`);
             const resolutionBadge = documentRef.getElementById(`${id}-res`);
             if (imgData) {
                 node.imageData = imgData;
+                node.imageDataList = imageList;
                 node.data.image = imgData;
-                savePreview.innerHTML = `<img src="${imgData}" alt="待保存" draggable="false" />`;
+                if (imageList.length > 1) node.data.images = imageList.slice();
+                else delete node.data.images;
+                node.imagePreviewIndex = 0;
+                renderImageSavePreview(id, imageList);
                 await saveImageAsset(id, imgData);
-                await showResolutionBadge(id, imgData);
+                await showResolutionBadge(id, imageList[0] || imgData);
                 if (manualSaveBtn) manualSaveBtn.disabled = false;
                 if (viewFullBtn) viewFullBtn.disabled = false;
-                await autoSaveToDir(id, imgData);
+                await autoSaveToDir(id, imageList);
                 await refreshDependentImageResizePreviews(id);
             } else {
                 node.imageData = null;
+                node.imageDataList = [];
                 delete node.data.image;
-                savePreview.innerHTML = '<div class="save-preview-placeholder">无输入图片</div>';
+                delete node.data.images;
+                renderImageSavePreview(id, [], '无输入图片');
                 await deleteImageAsset(id);
                 if (manualSaveBtn) manualSaveBtn.disabled = true;
                 if (viewFullBtn) viewFullBtn.disabled = true;
@@ -1052,7 +1120,7 @@ function renderImageGeneratePreviewState(nodeId, {
             throw new Error('URL 图片不支持连接到图片缩放节点');
         }
 
-        if (node.type === 'ImageSave' && isRemoteImageUrl(inputs.image)) {
+        if (node.type === 'ImageSave' && hasRemoteImageValue(inputs.image)) {
             throw new Error('URL 图片不支持连接到图片保存节点');
         }
 
