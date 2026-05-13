@@ -1,9 +1,13 @@
 import {
     buildHistoryCardMarkup,
     escapeHistoryHtml,
-    formatHistoryExactDate,
     groupHistoryItems
 } from './history-utils.js';
+
+const CARD_MIN_WIDTH = 230;
+const CARD_GAP = 12;
+const GROUP_HEADER_HEIGHT = 56;
+const VIRTUAL_OVERSCAN = 900;
 
 /**
  * 面向超大量历史记录的全屏浏览面板。
@@ -11,20 +15,39 @@ import {
 export function createHistoryFullscreenApi({
     state,
     getHistory,
+    getHistoryMetadata = getHistory,
+    getHistoryEntry = async (id) => (await getHistory()).find((entry) => entry.id === id) || null,
     clearHistory,
     deleteHistoryEntry,
     deleteHistoryItems,
     openHistoryPreview,
     downloadImage,
+    createThumbnail = null,
+    updateHistoryThumb = null,
     showToast,
     documentRef = document,
+    windowRef = window,
     confirmRef = confirm
 }) {
     const viewState = {
         items: [],
+        itemMap: new Map(),
         groups: [],
+        rows: [],
         activeGroupId: null,
-        scrollHandlerBound: false
+        scrollHandlerBound: false,
+        cardEventsBound: false,
+        renderFrame: 0,
+        renderedRangeKey: '',
+        thumbQueue: [],
+        queuedThumbIds: new Set(),
+        hydratingThumbs: false,
+        layout: {
+            width: 0,
+            columns: 1,
+            cardHeight: 272,
+            totalHeight: 0
+        }
     };
 
     function getEls() {
@@ -48,10 +71,64 @@ export function createHistoryFullscreenApi({
 
     function renderEmptyState() {
         const { list, timeline, count, summary } = getEls();
+        viewState.rows = [];
+        viewState.renderedRangeKey = '';
         if (count) count.textContent = '0';
         if (summary) summary.textContent = '按大概时间分组浏览历史记录';
-        if (list) list.innerHTML = '<div class="history-fullscreen-empty">暂无历史记录</div>';
+        if (list) {
+            list.classList.remove('history-fullscreen-list-virtual');
+            list.style.height = '';
+            list.innerHTML = '<div class="history-fullscreen-empty">暂无历史记录</div>';
+        }
         if (timeline) timeline.innerHTML = '';
+    }
+
+    function getLayoutMetrics() {
+        const { list, scroll } = getEls();
+        const width = Math.max(280, list?.clientWidth || scroll?.clientWidth || 960);
+        const columns = Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)));
+        const cardWidth = (width - ((columns - 1) * CARD_GAP)) / columns;
+        return {
+            width,
+            columns,
+            cardHeight: Math.max(220, Math.round(cardWidth * 1.18))
+        };
+    }
+
+    function buildVirtualRows() {
+        const layout = getLayoutMetrics();
+        const rows = [];
+        let top = 0;
+
+        viewState.groups.forEach((group) => {
+            rows.push({
+                id: `${group.id}:header`,
+                type: 'header',
+                group,
+                top,
+                height: GROUP_HEADER_HEIGHT
+            });
+            top += GROUP_HEADER_HEIGHT;
+
+            for (let index = 0; index < group.items.length; index += layout.columns) {
+                rows.push({
+                    id: `${group.id}:cards:${index}`,
+                    type: 'cards',
+                    group,
+                    items: group.items.slice(index, index + layout.columns),
+                    top,
+                    height: layout.cardHeight
+                });
+                top += layout.cardHeight + CARD_GAP;
+            }
+        });
+
+        viewState.rows = rows;
+        viewState.layout = {
+            ...layout,
+            totalHeight: Math.max(0, top)
+        };
+        viewState.renderedRangeKey = '';
     }
 
     function renderTimeline(groups) {
@@ -77,6 +154,64 @@ export function createHistoryFullscreenApi({
         });
     }
 
+    function renderVirtualRow(row) {
+        if (row.type === 'header') {
+            return `
+                <section class="history-fullscreen-virtual-row history-fullscreen-virtual-header-row"
+                    id="${row.group.id}"
+                    data-group-id="${row.group.id}"
+                    style="top:${row.top}px;height:${row.height}px;">
+                    <header class="history-fullscreen-group-header">
+                        <div class="history-fullscreen-group-title">
+                            <h3>${escapeHistoryHtml(row.group.label)}</h3>
+                            <span>${row.group.items.length} 条</span>
+                        </div>
+                    </header>
+                </section>
+            `;
+        }
+
+        return `
+            <div class="history-fullscreen-virtual-row history-fullscreen-virtual-card-row"
+                data-group-id="${row.group.id}"
+                style="top:${row.top}px;height:${row.height}px;--history-virtual-cols:${viewState.layout.columns};">
+                ${row.items.map((item) => buildHistoryCardMarkup({
+                    item,
+                    selected: state.selectedHistoryIds.has(item.id),
+                    multiSelectMode: state.historySelectionMode,
+                    compact: false
+                })).join('')}
+            </div>
+        `;
+    }
+
+    function getVisibleRows(scrollTop, viewportHeight) {
+        const start = Math.max(0, scrollTop - VIRTUAL_OVERSCAN);
+        const end = scrollTop + viewportHeight + VIRTUAL_OVERSCAN;
+        return viewState.rows.filter((row) => row.top + row.height >= start && row.top <= end);
+    }
+
+    function renderVirtualWindow({ force = false } = {}) {
+        const { scroll, list } = getEls();
+        if (!scroll || !list || !viewState.items.length) return;
+
+        const currentWidth = Math.max(280, list.clientWidth || scroll.clientWidth || 960);
+        if (Math.abs(currentWidth - viewState.layout.width) > 2) {
+            buildVirtualRows();
+            force = true;
+        }
+
+        const visibleRows = getVisibleRows(scroll.scrollTop, scroll.clientHeight || 800);
+        const rangeKey = visibleRows.map((row) => row.id).join('|');
+        if (!force && rangeKey === viewState.renderedRangeKey) return;
+
+        list.classList.add('history-fullscreen-list-virtual');
+        list.style.height = `${viewState.layout.totalHeight}px`;
+        list.innerHTML = visibleRows.map(renderVirtualRow).join('');
+        viewState.renderedRangeKey = rangeKey;
+        queueVisibleThumbHydration(visibleRows);
+    }
+
     function renderGroups() {
         const { list, count, summary } = getEls();
         if (!list) return;
@@ -86,85 +221,119 @@ export function createHistoryFullscreenApi({
         }
 
         if (count) count.textContent = String(viewState.items.length);
-        if (summary) summary.textContent = '按大概时间分组浏览历史记录';
+        if (summary) summary.textContent = `按大概时间分组浏览 ${viewState.items.length} 条历史记录`;
 
-        list.innerHTML = viewState.groups.map((group) => `
-            <section class="history-fullscreen-group" id="${group.id}" data-group-id="${group.id}">
-                <header class="history-fullscreen-group-header">
-                    <div class="history-fullscreen-group-title">
-                        <h3>${escapeHistoryHtml(group.label)}</h3>
-                        <span>${group.items.length} 条</span>
-                    </div>
-                </header>
-                <div class="history-fullscreen-group-grid">
-                    ${group.items.map((item) => buildHistoryCardMarkup({
-                        item,
-                        selected: state.selectedHistoryIds.has(item.id),
-                        multiSelectMode: state.historySelectionMode,
-                        compact: false
-                    })).join('')}
-                </div>
-            </section>
-        `).join('');
-
-        bindCardEvents();
+        buildVirtualRows();
         renderTimeline(viewState.groups);
+        renderVirtualWindow({ force: true });
         updateActiveGroupFromScroll();
+    }
+
+    function queueVisibleThumbHydration(rows) {
+        if (!createThumbnail || !updateHistoryThumb) return;
+        rows
+            .filter((row) => row.type === 'cards')
+            .flatMap((row) => row.items)
+            .filter((item) => item.hasImage && !item.thumb && !viewState.queuedThumbIds.has(item.id))
+            .forEach((item) => {
+                viewState.queuedThumbIds.add(item.id);
+                viewState.thumbQueue.push(item);
+            });
+
+        if (!viewState.hydratingThumbs && viewState.thumbQueue.length) {
+            viewState.hydratingThumbs = true;
+            setTimeout(processThumbQueue, 16);
+        }
+    }
+
+    async function processThumbQueue() {
+        const item = viewState.thumbQueue.shift();
+        if (!item) {
+            viewState.hydratingThumbs = false;
+            return;
+        }
+
+        try {
+            const entry = await getHistoryEntry(item.id);
+            if (entry?.image) {
+                const thumb = entry.thumb || await createThumbnail(entry.image);
+                if (!entry.thumb) await updateHistoryThumb(item.id, thumb, entry);
+                item.thumb = thumb;
+                viewState.itemMap.set(item.id, item);
+                const img = documentRef.querySelector(`#history-fullscreen-list .history-card[data-id="${item.id}"] img`);
+                if (img) {
+                    img.src = thumb;
+                    img.classList.remove('history-card-img-pending');
+                }
+            }
+        } catch (error) {
+            console.warn('Hydrate fullscreen history thumbnail failed:', error);
+        } finally {
+            setTimeout(processThumbQueue, 16);
+        }
     }
 
     function bindCardEvents() {
         const { list } = getEls();
-        if (!list) return;
+        if (!list || viewState.cardEventsBound) return;
 
-        list.querySelectorAll('.history-card').forEach((card) => {
-            card.draggable = true;
-            card.addEventListener('dragstart', (event) => {
-                const itemId = Number(card.dataset.id);
-                const item = viewState.items.find((entry) => entry.id === itemId);
-                if (!item?.image) return;
-                state.draggedHistoryImage = { id: item.id, image: item.image };
-                event.dataTransfer.effectAllowed = 'copy';
-                event.dataTransfer.setData('application/x-cainflow-history-image', String(item.id));
-            });
-
-            card.addEventListener('dragend', () => {
-                setTimeout(() => {
-                    state.draggedHistoryImage = null;
-                }, 0);
-            });
-
-            card.addEventListener('click', () => {
-                const itemId = Number(card.dataset.id);
-                const item = viewState.items.find((entry) => entry.id === itemId);
-                if (!item) return;
-
-                if (state.historySelectionMode) {
-                    if (state.selectedHistoryIds.has(itemId)) state.selectedHistoryIds.delete(itemId);
-                    else state.selectedHistoryIds.add(itemId);
-                    syncSelectionCount();
-                    renderGroups();
-                } else {
-                    openHistoryPreview(item);
-                }
-            });
-        });
-
-        list.querySelectorAll('.delete-btn').forEach((button) => {
-            button.addEventListener('click', async (event) => {
+        list.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('.delete-btn');
+            if (deleteButton) {
                 event.stopPropagation();
-                const id = Number(button.dataset.id);
+                const id = Number(deleteButton.dataset.id);
                 if (!confirmRef('确定要删除这条历史记录吗？')) return;
                 await deleteHistoryEntry(id);
                 await refresh();
-            });
+                return;
+            }
+
+            const card = event.target.closest('.history-card');
+            if (!card) return;
+            const itemId = Number(card.dataset.id);
+            const item = viewState.itemMap.get(itemId);
+            if (!item) return;
+
+            if (state.historySelectionMode) {
+                if (state.selectedHistoryIds.has(itemId)) state.selectedHistoryIds.delete(itemId);
+                else state.selectedHistoryIds.add(itemId);
+                card.classList.toggle('selected', state.selectedHistoryIds.has(itemId));
+                syncSelectionCount();
+            } else {
+                openHistoryPreview(item);
+            }
         });
+
+        list.addEventListener('dragstart', (event) => {
+            const card = event.target.closest('.history-card');
+            if (!card) return;
+            const itemId = Number(card.dataset.id);
+            const imagePromise = getHistoryEntry(itemId).then((entry) => entry?.image || '');
+            state.draggedHistoryImage = { id: itemId, image: null, imagePromise };
+            imagePromise.then((image) => {
+                if (state.draggedHistoryImage?.id === itemId) state.draggedHistoryImage.image = image;
+            });
+            event.dataTransfer.effectAllowed = 'copy';
+            event.dataTransfer.setData('application/x-cainflow-history-image', String(itemId));
+        });
+
+        list.addEventListener('dragend', () => {
+            setTimeout(() => {
+                state.draggedHistoryImage = null;
+            }, 0);
+        });
+
+        viewState.cardEventsBound = true;
     }
 
     async function refresh() {
-        viewState.items = await getHistory();
+        viewState.thumbQueue = [];
+        viewState.queuedThumbIds.clear();
+        viewState.items = await getHistoryMetadata();
+        viewState.itemMap = new Map(viewState.items.map((item) => [item.id, item]));
         viewState.groups = groupHistoryItems(viewState.items);
-        if (!viewState.activeGroupId && viewState.groups[0]) {
-            viewState.activeGroupId = viewState.groups[0].id;
+        if (!viewState.groups.some((group) => group.id === viewState.activeGroupId)) {
+            viewState.activeGroupId = viewState.groups[0]?.id || null;
         }
         syncSelectionCount();
         renderGroups();
@@ -187,27 +356,37 @@ export function createHistoryFullscreenApi({
 
     function jumpToGroup(groupId) {
         const { scroll } = getEls();
-        const groupEl = documentRef.getElementById(groupId);
-        if (!scroll || !groupEl) return;
-        const top = groupEl.offsetTop - 24;
-        scroll.scrollTo({ top, behavior: 'smooth' });
+        if (!scroll || !groupId) return;
+        const row = viewState.rows.find((entry) => entry.type === 'header' && entry.group.id === groupId);
+        if (!row) return;
+        scroll.scrollTo({ top: Math.max(0, row.top - 8), behavior: 'smooth' });
         viewState.activeGroupId = groupId;
         renderTimeline(viewState.groups);
     }
 
     function updateActiveGroupFromScroll() {
         const { scroll } = getEls();
-        if (!scroll) return;
-        const groups = Array.from(scroll.querySelectorAll('.history-fullscreen-group'));
-        const scrollTop = scroll.scrollTop;
-        let activeId = groups[0]?.dataset.groupId || null;
-        groups.forEach((group) => {
-            if (group.offsetTop - 80 <= scrollTop) activeId = group.dataset.groupId;
-        });
+        if (!scroll || !viewState.rows.length) return;
+        const targetTop = scroll.scrollTop + GROUP_HEADER_HEIGHT;
+        let activeId = viewState.groups[0]?.id || null;
+        for (const row of viewState.rows) {
+            if (row.type !== 'header') continue;
+            if (row.top <= targetTop) activeId = row.group.id;
+            else break;
+        }
         if (activeId && activeId !== viewState.activeGroupId) {
             viewState.activeGroupId = activeId;
             renderTimeline(viewState.groups);
         }
+    }
+
+    function onScroll() {
+        if (viewState.renderFrame) return;
+        viewState.renderFrame = windowRef.requestAnimationFrame(() => {
+            viewState.renderFrame = 0;
+            renderVirtualWindow();
+            updateActiveGroupFromScroll();
+        });
     }
 
     function open() {
@@ -218,11 +397,17 @@ export function createHistoryFullscreenApi({
     }
 
     function close() {
-        const { modal } = getEls();
+        const { modal, list, batchToolbar } = getEls();
         modal?.classList.add('hidden');
         hideTimelineTooltip();
         state.historySelectionMode = false;
         state.selectedHistoryIds.clear();
+        batchToolbar?.classList.add('hidden');
+        viewState.renderedRangeKey = '';
+        if (list) {
+            list.innerHTML = '';
+            list.style.height = '';
+        }
     }
 
     function enterBatchMode() {
@@ -231,7 +416,7 @@ export function createHistoryFullscreenApi({
         state.selectedHistoryIds.clear();
         batchToolbar?.classList.remove('hidden');
         syncSelectionCount();
-        renderGroups();
+        renderVirtualWindow({ force: true });
     }
 
     function exitBatchMode() {
@@ -240,13 +425,13 @@ export function createHistoryFullscreenApi({
         state.selectedHistoryIds.clear();
         batchToolbar?.classList.add('hidden');
         syncSelectionCount();
-        renderGroups();
+        renderVirtualWindow({ force: true });
     }
 
     async function selectAll() {
         viewState.items.forEach((item) => state.selectedHistoryIds.add(item.id));
         syncSelectionCount();
-        renderGroups();
+        renderVirtualWindow({ force: true });
     }
 
     async function deleteSelected() {
@@ -269,7 +454,8 @@ export function createHistoryFullscreenApi({
         }
         const selected = viewState.items.filter((item) => state.selectedHistoryIds.has(item.id));
         for (const item of selected) {
-            downloadImage(item.image, `cainflow_${item.id}.png`);
+            const entry = await getHistoryEntry(item.id);
+            if (entry?.image) downloadImage(entry.image, `cainflow_${entry.id}.png`);
             await new Promise((resolve) => setTimeout(resolve, 180));
         }
         showToast(`已开始下载 ${selected.length} 条历史记录`, 'success');
@@ -286,7 +472,8 @@ export function createHistoryFullscreenApi({
         if (viewState.scrollHandlerBound) return;
         const { scroll, modal } = getEls();
 
-        documentRef.getElementById('btn-expand-history')?.addEventListener('click', open);
+        bindCardEvents();
+
         documentRef.getElementById('btn-close-history-fullscreen')?.addEventListener('click', close);
         documentRef.getElementById('btn-history-fullscreen-batch')?.addEventListener('click', enterBatchMode);
         documentRef.getElementById('btn-history-fullscreen-cancel')?.addEventListener('click', exitBatchMode);
@@ -299,7 +486,14 @@ export function createHistoryFullscreenApi({
             if (event.target === modal) close();
         });
 
-        scroll?.addEventListener('scroll', updateActiveGroupFromScroll, { passive: true });
+        scroll?.addEventListener('scroll', onScroll, { passive: true });
+
+        windowRef.addEventListener('resize', () => {
+            if (!getEls().modal?.classList.contains('hidden') && viewState.items.length) {
+                buildVirtualRows();
+                renderVirtualWindow({ force: true });
+            }
+        }, { passive: true });
 
         documentRef.addEventListener('keydown', (event) => {
             const { modal: currentModal } = getEls();

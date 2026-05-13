@@ -60,12 +60,18 @@ export function createGlobalInteractionsApi({
             e.dataTransfer.dropEffect = 'copy';
         });
 
-        windowRef.addEventListener('drop', (e) => {
+        windowRef.addEventListener('drop', async (e) => {
             e.preventDefault();
 
             const historyDrag = state.draggedHistoryImage;
-            if (historyDrag?.image) {
-                importImageDataAtDrop(e, historyDrag.image, {
+            if (historyDrag?.image || historyDrag?.imagePromise) {
+                const historyImage = historyDrag.image || await historyDrag.imagePromise.catch(() => '');
+                if (!historyImage) {
+                    state.draggedHistoryImage = null;
+                    showToast('读取历史原图失败', 'error');
+                    return;
+                }
+                importImageDataAtDrop(e, historyImage, {
                     update: '已使用历史原图更新现有图片节点',
                     create: '已从历史记录导入原始分辨率图片'
                 });

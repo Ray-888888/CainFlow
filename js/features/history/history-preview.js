@@ -3,9 +3,9 @@
  */
 export function createHistoryPreviewApi({
     getHistory,
+    getHistoryMetadata = getHistory,
+    getHistoryEntry = async (id) => (await getHistory()).find((entry) => entry.id === id) || null,
     deleteHistoryEntry,
-    openDB,
-    storeHistoryName,
     getImageResolution,
     downloadImage,
     copyToClipboard,
@@ -22,7 +22,9 @@ export function createHistoryPreviewApi({
         startX: 0,
         startY: 0,
         items: [],
-        currentIndex: -1
+        currentIndex: -1,
+        currentItem: null,
+        loadToken: 0
     };
 
     function updatePreviewTransform() {
@@ -32,32 +34,130 @@ export function createHistoryPreviewApi({
         }
     }
 
+    function fitPreviewImage() {
+        const img = documentRef.getElementById('history-preview-img');
+        const viewport = documentRef.getElementById('preview-viewport');
+        if (!img || !viewport) return;
+
+        const vw = viewport.clientWidth;
+        const vh = viewport.clientHeight;
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+
+        if (iw && ih) {
+            const scale = Math.min((vw - 60) / iw, (vh - 60) / ih, 1);
+            previewState.scale = scale;
+            previewState.x = 0;
+            previewState.y = 0;
+            updatePreviewTransform();
+        }
+    }
+
+    function setPreviewImageSource(src, token) {
+        const img = documentRef.getElementById('history-preview-img');
+        if (!img || !src || token !== previewState.loadToken) return Promise.resolve('');
+
+        return new Promise((resolve) => {
+            const loader = new Image();
+            loader.decoding = 'async';
+            loader.onload = () => {
+                if (token !== previewState.loadToken) {
+                    resolve('');
+                    return;
+                }
+                const resolution = loader.naturalWidth && loader.naturalHeight
+                    ? `${loader.naturalWidth} × ${loader.naturalHeight}`
+                    : '';
+                img.onload = () => {
+                    if (token !== previewState.loadToken) return;
+                    img.classList.remove('history-preview-img-loading');
+                    fitPreviewImage();
+                };
+                img.src = src;
+                if (img.complete) {
+                    img.classList.remove('history-preview-img-loading');
+                    windowRef.requestAnimationFrame(fitPreviewImage);
+                }
+                resolve(resolution);
+            };
+            loader.onerror = async () => {
+                if (token !== previewState.loadToken) {
+                    resolve('');
+                    return;
+                }
+                img.classList.remove('history-preview-img-loading');
+                resolve(getImageResolution ? await getImageResolution(src) : '');
+            };
+            loader.src = src;
+        });
+    }
+
+    function updatePreviewMeta(item, resolution) {
+        const metaText = documentRef.getElementById('preview-meta');
+        if (!metaText) return;
+        metaText.innerHTML = `
+            <span>模型: ${item.model}</span>
+            <span>分辨率: ${resolution || '未知'}</span>
+            <span>时间: ${new Date(item.timestamp).toLocaleString()}</span>
+            <span style="margin-left:auto; opacity:0.6; font-family:monospace;">${previewState.currentIndex + 1} / ${previewState.items.length}</span>
+        `;
+    }
+
+    function syncPreviewNavState() {
+        const btnPrev = documentRef.getElementById('btn-prev-preview');
+        const btnNext = documentRef.getElementById('btn-next-preview');
+        if (btnPrev) btnPrev.classList.toggle('disabled', previewState.currentIndex <= 0);
+        if (btnNext) btnNext.classList.toggle('disabled', previewState.currentIndex >= previewState.items.length - 1);
+    }
+
+    async function getFullHistoryItem(item) {
+        if (item?.image) return item;
+        const entry = await getHistoryEntry(item.id);
+        return entry || item;
+    }
+
     async function updatePreviewContent(item) {
         if (!item) return;
+        const token = ++previewState.loadToken;
         const img = documentRef.getElementById('history-preview-img');
         const promptText = documentRef.getElementById('preview-prompt');
         const metaText = documentRef.getElementById('preview-meta');
         const btnDownload = documentRef.getElementById('btn-download-preview');
         const btnCopy = documentRef.getElementById('btn-copy-prompt');
         const btnDelete = documentRef.getElementById('btn-delete-preview');
-        const resolution = await getImageResolution(item.image);
 
-        img.src = item.image;
-        promptText.textContent = item.prompt;
+        previewState.currentItem = item;
+        previewState.scale = 1;
+        previewState.x = 0;
+        previewState.y = 0;
+
+        if (img) {
+            img.onload = null;
+            img.classList.add('history-preview-img-loading');
+            if (item.thumb) {
+                img.src = item.thumb;
+                windowRef.requestAnimationFrame(fitPreviewImage);
+            } else if (!img.src) {
+                img.removeAttribute('src');
+            }
+        }
+
+        promptText.textContent = item.prompt || '';
         metaText.innerHTML = `
         <span>模型: ${item.model}</span>
-        <span>分辨率: ${resolution || '未知'}</span>
+        <span>分辨率: 读取中...</span>
         <span>时间: ${new Date(item.timestamp).toLocaleString()}</span>
         <span style="margin-left:auto; opacity:0.6; font-family:monospace;">${previewState.currentIndex + 1} / ${previewState.items.length}</span>
     `;
 
-        btnDownload.onclick = (e) => {
+        btnDownload.onclick = async (e) => {
             e.stopPropagation();
-            downloadImage(item.image, `cainflow_${item.id}.png`);
+            const fullItem = await getFullHistoryItem(previewState.currentItem || item);
+            if (fullItem?.image) downloadImage(fullItem.image, `cainflow_${fullItem.id}.png`);
         };
         btnCopy.onclick = (e) => {
             e.stopPropagation();
-            copyToClipboard(item.prompt);
+            copyToClipboard(item.prompt || '');
         };
         if (btnDelete) {
             btnDelete.onclick = (e) => {
@@ -66,62 +166,57 @@ export function createHistoryPreviewApi({
             };
         }
 
-        const btnPrev = documentRef.getElementById('btn-prev-preview');
-        const btnNext = documentRef.getElementById('btn-next-preview');
-        if (btnPrev) btnPrev.classList.toggle('disabled', previewState.currentIndex <= 0);
-        if (btnNext) btnNext.classList.toggle('disabled', previewState.currentIndex >= previewState.items.length - 1);
+        syncPreviewNavState();
+
+        const fullItem = await getFullHistoryItem(item);
+        if (token !== previewState.loadToken) return;
+        previewState.currentItem = fullItem;
+
+        if (fullItem?.image) {
+            const resolution = await setPreviewImageSource(fullItem.image, token);
+            if (token !== previewState.loadToken) return;
+            updatePreviewMeta(fullItem, resolution);
+        } else {
+            updatePreviewMeta(item, '');
+        }
     }
 
     function closeHistoryPreview() {
         const modal = documentRef.getElementById('history-preview-modal');
         if (modal) modal.classList.add('hidden');
+        previewState.loadToken += 1;
         documentRef.removeEventListener('keydown', onPreviewKeyDown);
     }
 
     async function openHistoryPreview(item) {
         const modal = documentRef.getElementById('history-preview-modal');
         const viewport = documentRef.getElementById('preview-viewport');
-
-        const history = await getHistory();
-        previewState.items = history;
-        previewState.currentIndex = history.findIndex((entry) => entry.id === item.id);
-
-        await updatePreviewContent(item);
+        if (!modal) return;
         modal.classList.remove('hidden');
+        modal.onclick = (e) => {
+            if (e.target === modal || e.target === viewport) {
+                closeHistoryPreview();
+            }
+        };
+        documentRef.removeEventListener('keydown', onPreviewKeyDown);
+        documentRef.addEventListener('keydown', onPreviewKeyDown);
+
+        previewState.items = [item];
+        previewState.currentIndex = 0;
+        const contentPromise = updatePreviewContent(item);
+        const history = await getHistoryMetadata();
+        previewState.items = history.length ? history : [item];
+        previewState.currentIndex = history.findIndex((entry) => entry.id === item.id);
+        if (previewState.currentIndex < 0) previewState.currentIndex = 0;
+        syncPreviewNavState();
+        await contentPromise;
 
         previewState.scale = 1;
         previewState.x = 0;
         previewState.y = 0;
         previewState.isDragging = false;
 
-        const img = documentRef.getElementById('history-preview-img');
-        const fitImage = () => {
-            const vw = viewport.clientWidth;
-            const vh = viewport.clientHeight;
-            const iw = img.naturalWidth || img.width;
-            const ih = img.naturalHeight || img.height;
-
-            if (iw && ih) {
-                const scale = Math.min((vw - 60) / iw, (vh - 60) / ih, 1);
-                previewState.scale = scale;
-                previewState.x = 0;
-                previewState.y = 0;
-                updatePreviewTransform();
-            }
-        };
-
-        if (img.complete) fitImage();
-        else img.onload = fitImage;
-
         updatePreviewTransform();
-
-        modal.onclick = (e) => {
-            if (e.target === modal || e.target === viewport) {
-                closeHistoryPreview();
-            }
-        };
-
-        documentRef.addEventListener('keydown', onPreviewKeyDown);
     }
 
     async function navigateHistory(direction) {
@@ -135,17 +230,6 @@ export function createHistoryPreviewApi({
         previewState.y = 0;
 
         await updatePreviewContent(item);
-
-        const img = documentRef.getElementById('history-preview-img');
-        const viewport = documentRef.getElementById('preview-viewport');
-        const applyFit = () => {
-            const scale = Math.min((viewport.clientWidth - 60) / (img.naturalWidth || 100), (viewport.clientHeight - 60) / (img.naturalHeight || 100), 1);
-            previewState.scale = scale;
-            updatePreviewTransform();
-        };
-
-        if (img.complete) setTimeout(applyFit, 50);
-        else img.onload = applyFit;
     }
 
     function onPreviewKeyDown(e) {
@@ -161,7 +245,7 @@ export function createHistoryPreviewApi({
     }
 
     async function deleteCurrentPreviewItem() {
-        const item = previewState.items[previewState.currentIndex];
+        const item = previewState.currentItem || previewState.items[previewState.currentIndex];
         if (!item) return;
 
         if (windowRef.confirm('确定要从历史记录中删除这张图片吗？\n此操作无法撤销。')) {
@@ -186,13 +270,8 @@ export function createHistoryPreviewApi({
     async function deleteHistoryItems(ids) {
         if (!ids || ids.length === 0) return;
         try {
-            const db = await openDB();
-            const tx = db.transaction(storeHistoryName, 'readwrite');
-            const store = tx.objectStore(storeHistoryName);
-            ids.forEach((id) => store.delete(id));
-            return new Promise((resolve) => {
-                tx.oncomplete = () => resolve(true);
-            });
+            await Promise.all(ids.map((id) => deleteHistoryEntry(Number(id))));
+            return true;
         } catch (e) {
             console.error('Delete history items failed:', e);
         }

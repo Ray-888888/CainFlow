@@ -1,6 +1,8 @@
 /**
  * 历史记录渲染、按天分组和时间标签的通用工具。
  */
+const TRANSPARENT_HISTORY_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
 export function escapeHistoryHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
         '&': '&amp;',
@@ -80,14 +82,15 @@ export function buildHistoryCardMarkup({
     const selectedClass = selected ? 'selected' : '';
     const multiClass = multiSelectMode ? 'multi-select-mode' : '';
     const compactClass = compact ? 'history-card-compact' : '';
-    const thumb = escapeHistoryHtml(item.thumb || item.image || '');
+    const thumb = item.thumb || '';
     const prompt = escapeHistoryHtml(item.prompt || '');
     const model = escapeHistoryHtml(item.model || '');
     const exactDate = escapeHistoryHtml(formatHistoryExactDate(item.timestamp));
+    const imageClass = thumb ? '' : 'history-card-img-pending';
 
     return `
-        <article class="history-card ${selectedClass} ${multiClass} ${compactClass}" data-id="${item.id}">
-            <img src="${thumb}" loading="lazy" decoding="async" alt="${prompt}" />
+        <article class="history-card ${selectedClass} ${multiClass} ${compactClass}" data-id="${item.id}" draggable="true">
+            <img class="${imageClass}" src="${escapeHistoryHtml(thumb || TRANSPARENT_HISTORY_PIXEL)}" loading="lazy" decoding="async" alt="${prompt}" />
             <div class="selection-checkbox"></div>
             <button class="delete-btn" data-id="${item.id}" title="删除记录">×</button>
             ${compact ? '' : `

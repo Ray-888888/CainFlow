@@ -12,7 +12,10 @@ export function createUiControllerApi({
     storeHistoryName,
     storeAssetsName,
     clearHistory,
+    clearImageAssets = null,
     getHistory,
+    getHistoryMetadata = getHistory,
+    getHistoryEntry = async (id) => (await getHistory()).find((item) => item.id === id) || null,
     renderHistoryList,
     renderLogs,
     historyPreviewApi,
@@ -334,7 +337,7 @@ export function createUiControllerApi({
         });
 
         documentRef.getElementById('btn-batch-select-all')?.addEventListener('click', async () => {
-            const items = await getHistory();
+            const items = await getHistoryMetadata();
             items.forEach((item) => state.selectedHistoryIds.add(item.id));
             renderHistoryList();
         });
@@ -352,11 +355,12 @@ export function createUiControllerApi({
                 return;
             }
 
-            const items = await getHistory();
+            const items = await getHistoryMetadata();
             const selected = items.filter((item) => state.selectedHistoryIds.has(item.id));
 
             for (const item of selected) {
-                downloadImage(item.image, `cainflow_${item.id}.png`);
+                const entry = await getHistoryEntry(item.id);
+                if (entry?.image) downloadImage(entry.image, `cainflow_${entry.id}.png`);
                 await new Promise((resolve) => setTimeout(resolve, 200));
             }
 
@@ -479,9 +483,7 @@ export function createUiControllerApi({
             if (!confirmRef('确定要清理所有历史记录吗？\n\n这将永久删除浏览器本地存储的历史生成图库，无法撤销。')) return;
 
             try {
-                const db = await openDB();
-                const tx = db.transaction(storeHistoryName, 'readwrite');
-                await tx.objectStore(storeHistoryName).clear();
+                await clearHistory();
 
                 showToast('历史生成记录已清空', 'success');
                 settingsControllerApi?.updateCacheUsage();
@@ -497,9 +499,13 @@ export function createUiControllerApi({
             if (!confirmRef('确定要清理所有节点资产吗？\n\n这会删除画布上当前正在显示的所有图片缓存。清理后刷新页面，图片将变成占位符！')) return;
 
             try {
-                const db = await openDB();
-                const tx = db.transaction(storeAssetsName, 'readwrite');
-                await tx.objectStore(storeAssetsName).clear();
+                if (clearImageAssets) {
+                    await clearImageAssets({ preserveHistory: true });
+                } else {
+                    const db = await openDB();
+                    const tx = db.transaction(storeAssetsName, 'readwrite');
+                    tx.objectStore(storeAssetsName).clear();
+                }
 
                 showToast('当前画布资产已清理', 'success');
                 settingsControllerApi?.updateCacheUsage();

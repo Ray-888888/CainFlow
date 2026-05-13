@@ -202,7 +202,24 @@ const dirHandles = new Map();
 
 const proxyHeadersGetter = createProxyHeadersGetter(() => state);
 const indexedDbApi = createIndexedDbApi(() => state);
-const { openDB, saveHandle, getHandle, saveImageAsset, getImageAsset, deleteImageAsset, createThumbnail, saveHistoryEntry, getHistory, clearHistory, deleteHistoryEntry } = indexedDbApi;
+const {
+    openDB,
+    saveHandle,
+    getHandle,
+    saveImageAsset,
+    getImageAsset,
+    deleteImageAsset,
+    clearImageAssets,
+    createThumbnail,
+    saveHistoryEntry,
+    getHistory,
+    getHistoryMetadata,
+    getHistoryCount,
+    getHistoryEntry,
+    updateHistoryThumb,
+    clearHistory,
+    deleteHistoryEntry
+} = indexedDbApi;
 const mediaUtils = createMediaUtils({
     getImageMaxPixels: () => state.imageMaxPixels,
     documentRef: document
@@ -270,11 +287,13 @@ function getHistoryPanelApi() {
         historyPanelApi = createHistoryPanelApi({
             state,
             getHistory,
+            getHistoryMetadata,
+            getHistoryCount,
+            getHistoryEntry,
             createThumbnail,
-            openDB,
+            updateHistoryThumb,
             openHistoryPreview: (item) => historyPreviewApi.openHistoryPreview(item),
-            deleteHistoryEntry,
-            storeHistoryName: STORE_HISTORY
+            deleteHistoryEntry
         });
     }
     return historyPanelApi;
@@ -285,11 +304,15 @@ function getHistoryFullscreenApi() {
         historyFullscreenApi = createHistoryFullscreenApi({
             state,
             getHistory,
+            getHistoryMetadata,
+            getHistoryEntry,
             clearHistory,
             deleteHistoryEntry,
             deleteHistoryItems: (ids) => historyPreviewApi.deleteHistoryItems(ids),
             openHistoryPreview: (item) => historyPreviewApi.openHistoryPreview(item),
             downloadImage,
+            createThumbnail,
+            updateHistoryThumb,
             showToast
         });
     }
@@ -577,7 +600,10 @@ function getUiControllerApi() {
             storeHistoryName: STORE_HISTORY,
             storeAssetsName: STORE_ASSETS,
             clearHistory,
+            clearImageAssets,
             getHistory,
+            getHistoryMetadata,
+            getHistoryEntry,
             renderHistoryList,
             renderLogs,
             historyPreviewApi,
@@ -953,9 +979,9 @@ settingsControllerApi = createSettingsControllerApi({
 });
 historyPreviewApi = createHistoryPreviewApi({
     getHistory,
+    getHistoryMetadata,
+    getHistoryEntry,
     deleteHistoryEntry,
-    openDB,
-    storeHistoryName: STORE_HISTORY,
     getImageResolution,
     downloadImage,
     copyToClipboard,

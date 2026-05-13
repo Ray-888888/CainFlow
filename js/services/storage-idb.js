@@ -10,8 +10,22 @@ import {
 } from '../core/constants.js';
 
 let dbInstance = null;
+const HISTORY_ASSET_KEY_PREFIX = 'history:';
+
+function getHistoryAssetKey(id) {
+    return `${HISTORY_ASSET_KEY_PREFIX}${id}`;
+}
+
+function stripHistoryImage(entry) {
+    if (!entry) return entry;
+    const { image, ...metadata } = entry;
+    return metadata;
+}
 
 export function createIndexedDbApi(getState) {
+    const pendingHistoryMigrations = new Set();
+    let historyMigrationRunning = false;
+
     async function openDB() {
         if (dbInstance) return dbInstance;
         return new Promise((resolve, reject) => {
@@ -121,14 +135,21 @@ export function createIndexedDbApi(getState) {
     async function saveHistoryEntry(data) {
         try {
             const thumb = await createThumbnail(data.image, 256);
-            const entry = { ...data, thumb, timestamp: Date.now() };
+            const entry = stripHistoryImage({ ...data, thumb, timestamp: Date.now() });
             const db = await openDB();
-            const tx = db.transaction(STORE_HISTORY, 'readwrite');
-            tx.objectStore(STORE_HISTORY).add(entry);
+            const tx = db.transaction([STORE_HISTORY, STORE_ASSETS], 'readwrite');
+            const historyStore = tx.objectStore(STORE_HISTORY);
+            const assetStore = tx.objectStore(STORE_ASSETS);
+            const addReq = historyStore.add(entry);
+            addReq.onsuccess = () => {
+                const id = addReq.result;
+                const imageAssetKey = getHistoryAssetKey(id);
+                assetStore.put(data.image, imageAssetKey);
+                historyStore.put({ ...entry, id, imageAssetKey });
+            };
             const state = getState();
-            if (state.cacheSizes[STORE_HISTORY] !== null && state.cacheSizes[STORE_HISTORY] !== undefined) {
-                state.cacheSizes[STORE_HISTORY] += JSON.stringify(entry).length / (1024 * 1024);
-            }
+            state.cacheSizes[STORE_HISTORY] = null;
+            state.cacheSizes[STORE_ASSETS] = null;
             return await waitForTransaction(tx);
         } catch (error) {
             console.warn('IDB save history failed:', error);
@@ -136,22 +157,226 @@ export function createIndexedDbApi(getState) {
         }
     }
 
+    async function clearImageAssets({ preserveHistory = true } = {}) {
+        try {
+            const db = await openDB();
+            const tx = db.transaction(STORE_ASSETS, 'readwrite');
+            const store = tx.objectStore(STORE_ASSETS);
+
+            if (!preserveHistory) {
+                store.clear();
+            } else {
+                const req = store.openKeyCursor();
+                req.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (!cursor) return;
+                    const isHistoryAsset = typeof cursor.key === 'string' && cursor.key.startsWith(HISTORY_ASSET_KEY_PREFIX);
+                    if (!isHistoryAsset) store.delete(cursor.key);
+                    cursor.continue();
+                };
+            }
+
+            getState().cacheSizes[STORE_ASSETS] = null;
+            return await waitForTransaction(tx);
+        } catch {
+            return false;
+        }
+    }
+
+    function toHistoryMetadata(entry) {
+        if (!entry) return null;
+        if (entry.image && !entry.imageAssetKey && entry.id !== undefined) {
+            scheduleHistoryAssetMigration(entry);
+        }
+        return {
+            id: entry.id,
+            thumb: entry.thumb || '',
+            prompt: entry.prompt || '',
+            model: entry.model || '',
+            timestamp: entry.timestamp || 0,
+            imageAssetKey: entry.imageAssetKey || (entry.id !== undefined ? getHistoryAssetKey(entry.id) : ''),
+            hasImage: Boolean(entry.image || entry.imageAssetKey)
+        };
+    }
+
+    function scheduleHistoryAssetMigration(entry) {
+        if (!entry?.id || !entry.image || entry.imageAssetKey || pendingHistoryMigrations.has(entry.id)) return;
+        pendingHistoryMigrations.add(entry.id);
+        if (!historyMigrationRunning) {
+            historyMigrationRunning = true;
+            setTimeout(processNextHistoryMigration, 0);
+        }
+    }
+
+    async function processNextHistoryMigration() {
+        const next = pendingHistoryMigrations.values().next();
+        if (next.done) {
+            historyMigrationRunning = false;
+            return;
+        }
+
+        const id = next.value;
+        pendingHistoryMigrations.delete(id);
+
+        try {
+            const db = await openDB();
+            const tx = db.transaction([STORE_HISTORY, STORE_ASSETS], 'readwrite');
+            const historyStore = tx.objectStore(STORE_HISTORY);
+            const assetStore = tx.objectStore(STORE_ASSETS);
+            const req = historyStore.get(id);
+            req.onsuccess = () => {
+                const entry = req.result;
+                if (!entry?.image || entry.imageAssetKey) return;
+                const imageAssetKey = getHistoryAssetKey(id);
+                assetStore.put(entry.image, imageAssetKey);
+                historyStore.put({
+                    ...stripHistoryImage(entry),
+                    imageAssetKey
+                });
+            };
+            await waitForTransaction(tx);
+        } catch (error) {
+            console.warn('IDB migrate history image failed:', error);
+        } finally {
+            setTimeout(processNextHistoryMigration, 16);
+        }
+    }
+
+    async function hydrateHistoryEntry(entry) {
+        if (!entry) return null;
+        if (entry.image) {
+            if (!entry.imageAssetKey && entry.id !== undefined) scheduleHistoryAssetMigration(entry);
+            return entry;
+        }
+        const imageAssetKey = entry.imageAssetKey || getHistoryAssetKey(entry.id);
+        const image = await getImageAsset(imageAssetKey);
+        return { ...entry, image: image || '' };
+    }
+
     async function getHistory() {
         try {
             const db = await openDB();
             const result = await requestToPromise(db.transaction(STORE_HISTORY).objectStore(STORE_HISTORY).getAll());
-            return (result || []).sort((a, b) => b.timestamp - a.timestamp);
+            const sorted = (result || []).sort((a, b) => b.timestamp - a.timestamp);
+            return await Promise.all(sorted.map((entry) => hydrateHistoryEntry(entry)));
         } catch {
             return [];
+        }
+    }
+
+    async function getHistoryMetadata(options = {}) {
+        try {
+            const limit = Number.isFinite(options.limit) ? Math.max(0, Number(options.limit)) : Infinity;
+            if (limit === 0) return [];
+            const direction = options.newestFirst === false ? 'next' : 'prev';
+            const db = await openDB();
+            const tx = db.transaction(STORE_HISTORY, 'readonly');
+            const store = tx.objectStore(STORE_HISTORY);
+            const items = [];
+
+            await new Promise((resolve) => {
+                const req = store.openCursor(null, direction);
+                req.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (!cursor) {
+                        resolve();
+                        return;
+                    }
+
+                    const metadata = toHistoryMetadata(cursor.value);
+                    if (metadata) items.push(metadata);
+                    if (items.length >= limit) {
+                        resolve();
+                        return;
+                    }
+                    cursor.continue();
+                };
+                req.onerror = () => resolve();
+            });
+
+            return options.preserveCursorOrder
+                ? items
+                : items.sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+        } catch {
+            return [];
+        }
+    }
+
+    async function getHistoryCount() {
+        try {
+            const db = await openDB();
+            return await requestToPromise(db.transaction(STORE_HISTORY).objectStore(STORE_HISTORY).count()) || 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    async function getHistoryEntry(id) {
+        try {
+            const normalizedId = Number(id);
+            if (!Number.isFinite(normalizedId)) return null;
+            const db = await openDB();
+            const entry = await requestToPromise(db.transaction(STORE_HISTORY).objectStore(STORE_HISTORY).get(normalizedId));
+            return await hydrateHistoryEntry(entry);
+        } catch {
+            return null;
+        }
+    }
+
+    async function updateHistoryThumb(id, thumb, knownEntry = null) {
+        if (!thumb) return false;
+        try {
+            const normalizedId = Number(id);
+            if (!Number.isFinite(normalizedId)) return false;
+            const db = await openDB();
+            const tx = db.transaction([STORE_HISTORY, STORE_ASSETS], 'readwrite');
+            const store = tx.objectStore(STORE_HISTORY);
+            const assetStore = tx.objectStore(STORE_ASSETS);
+            const putWithThumb = (entry) => {
+                if (!entry) return;
+                const next = { ...entry, thumb };
+                if (next.image && !next.imageAssetKey) {
+                    const imageAssetKey = getHistoryAssetKey(normalizedId);
+                    assetStore.put(next.image, imageAssetKey);
+                    store.put({ ...stripHistoryImage(next), imageAssetKey });
+                    return;
+                }
+                store.put(next.image ? stripHistoryImage(next) : next);
+            };
+            if (knownEntry) {
+                putWithThumb(knownEntry);
+            } else {
+                const req = store.get(normalizedId);
+                req.onsuccess = () => {
+                    putWithThumb(req.result);
+                };
+            }
+            getState().cacheSizes[STORE_HISTORY] = null;
+            getState().cacheSizes[STORE_ASSETS] = null;
+            return await waitForTransaction(tx);
+        } catch (error) {
+            console.warn('IDB update history thumbnail failed:', error);
+            return false;
         }
     }
 
     async function clearHistory() {
         try {
             const db = await openDB();
-            const tx = db.transaction(STORE_HISTORY, 'readwrite');
+            const tx = db.transaction([STORE_HISTORY, STORE_ASSETS], 'readwrite');
             tx.objectStore(STORE_HISTORY).clear();
+            const assetStore = tx.objectStore(STORE_ASSETS);
+            const req = assetStore.openKeyCursor();
+            req.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (!cursor) return;
+                if (typeof cursor.key === 'string' && cursor.key.startsWith(HISTORY_ASSET_KEY_PREFIX)) {
+                    assetStore.delete(cursor.key);
+                }
+                cursor.continue();
+            };
             getState().cacheSizes[STORE_HISTORY] = 0;
+            getState().cacheSizes[STORE_ASSETS] = null;
             return await waitForTransaction(tx);
         } catch (error) {
             console.warn('IDB clear history failed:', error);
@@ -161,10 +386,14 @@ export function createIndexedDbApi(getState) {
 
     async function deleteHistoryEntry(id) {
         try {
+            const normalizedId = Number(id);
+            if (!Number.isFinite(normalizedId)) return false;
             const db = await openDB();
-            const tx = db.transaction(STORE_HISTORY, 'readwrite');
-            tx.objectStore(STORE_HISTORY).delete(id);
+            const tx = db.transaction([STORE_HISTORY, STORE_ASSETS], 'readwrite');
+            tx.objectStore(STORE_HISTORY).delete(normalizedId);
+            tx.objectStore(STORE_ASSETS).delete(getHistoryAssetKey(normalizedId));
             getState().cacheSizes[STORE_HISTORY] = null;
+            getState().cacheSizes[STORE_ASSETS] = null;
             return await waitForTransaction(tx);
         } catch (error) {
             console.warn('IDB delete history failed:', error);
@@ -179,9 +408,14 @@ export function createIndexedDbApi(getState) {
         saveImageAsset,
         getImageAsset,
         deleteImageAsset,
+        clearImageAssets,
         createThumbnail,
         saveHistoryEntry,
         getHistory,
+        getHistoryMetadata,
+        getHistoryCount,
+        getHistoryEntry,
+        updateHistoryThumb,
         clearHistory,
         deleteHistoryEntry
     };

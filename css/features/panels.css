@@ -695,9 +695,9 @@
 }
 
 .history-fullscreen-list {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
+    display: block;
+    position: relative;
+    min-height: 100%;
 }
 
 .history-fullscreen-empty {
@@ -713,6 +713,43 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.history-fullscreen-list-virtual {
+    min-height: 100%;
+}
+
+.history-fullscreen-virtual-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.history-fullscreen-virtual-header-row .history-fullscreen-group-header {
+    position: relative;
+    top: auto;
+    height: 100%;
+    padding: 10px 2px 12px;
+}
+
+.history-fullscreen-virtual-card-row {
+    display: grid;
+    grid-template-columns: repeat(var(--history-virtual-cols, 3), minmax(0, 1fr));
+    gap: 12px;
+}
+
+.history-fullscreen-virtual-card-row .history-card {
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: 14px;
+}
+
+.history-fullscreen-virtual-card-row .history-card img {
+    height: calc(100% - 72px);
+}
+
+.history-fullscreen-virtual-card-row .history-card .delete-btn {
+    opacity: 1;
 }
 
 .history-fullscreen-group-header {
