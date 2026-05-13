@@ -16,7 +16,7 @@ from urllib import request as urllib_request
 from backend import config, state
 
 
-DOWNLOAD_CHUNK_SIZE = 256 * 1024
+DOWNLOAD_CHUNK_SIZE = 64 * 1024
 GITHUB_RELEASE_API_TIMEOUT = 45.0
 GITHUB_DOWNLOAD_TIMEOUT = 600.0
 ACTIVE_UPDATE_STATUSES = {'starting', 'resolving', 'downloading', 'extracting', 'replacing', 'canceling'}
@@ -131,12 +131,29 @@ def _select_release_zip_asset(release_data):
     return candidates[0]
 
 
-def _download_release_zip(download_url, destination, progress_callback=None, cancel_event=None):
+def _get_release_asset_size(asset):
+    try:
+        size = int(asset.get('size') or 0)
+        return size if size > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_positive_int(value):
+    try:
+        number = int(value or 0)
+        return number if number > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _download_release_zip(download_url, destination, expected_total_hint=0, progress_callback=None, cancel_event=None):
     temp_destination = destination.with_name(f'.{destination.name}.download')
     total_bytes = 0
     try:
         with _open_github_url(download_url, GITHUB_DOWNLOAD_TIMEOUT) as response:
-            expected_total = int(response.headers.get('Content-Length') or 0)
+            content_length = _parse_positive_int(response.headers.get('Content-Length'))
+            expected_total = expected_total_hint or content_length
             started_at = time.monotonic()
             if progress_callback:
                 progress_callback(0, expected_total, started_at)
@@ -153,6 +170,8 @@ def _download_release_zip(download_url, destination, progress_callback=None, can
                         progress_callback(total_bytes, expected_total, started_at)
                     if cancel_event and cancel_event.is_set():
                         raise UpdateCancelled('用户已取消下载')
+        if progress_callback:
+            progress_callback(total_bytes, total_bytes, started_at)
         os.replace(temp_destination, destination)
         return total_bytes
     except urllib_error.HTTPError as error:
@@ -305,6 +324,7 @@ def download_and_prepare_latest_update(repo=None, progress_callback=None, cancel
         downloaded_bytes = _download_release_zip(
             str(asset.get('browser_download_url')),
             zip_path,
+            expected_total_hint=_get_release_asset_size(asset),
             progress_callback=progress_callback,
             cancel_event=cancel_event,
         )
@@ -332,6 +352,7 @@ def download_and_prepare_latest_update(repo=None, progress_callback=None, cancel
             'targetPath': str(target_path),
             'extractedMember': member_name,
             'downloadedBytes': downloaded_bytes,
+            'totalBytes': downloaded_bytes,
             **replacement_result,
         }
     finally:
@@ -358,12 +379,13 @@ def _set_job(job, **updates):
 def _set_download_progress(job, downloaded_bytes, total_bytes, started_at):
     elapsed = max(time.monotonic() - started_at, 0.001)
     speed = int(downloaded_bytes / elapsed)
-    percent = round((downloaded_bytes / total_bytes) * 100, 1) if total_bytes else None
+    safe_total = max(int(total_bytes or 0), int(downloaded_bytes or 0))
+    percent = round((downloaded_bytes / safe_total) * 100, 1) if safe_total else None
     _set_job(
         job,
         status='downloading',
         downloadedBytes=downloaded_bytes,
-        totalBytes=total_bytes,
+        totalBytes=safe_total,
         speedBytesPerSecond=speed,
         percent=percent,
     )
@@ -387,7 +409,10 @@ def _run_update_job(job, repo):
             status='completed',
             message=result.get('message') or '更新已完成，请重启 CainFlow 主程序。',
             result=result,
+            downloadedBytes=result.get('downloadedBytes') or job.get('downloadedBytes') or 0,
+            totalBytes=result.get('totalBytes') or result.get('downloadedBytes') or job.get('totalBytes') or 0,
             speedBytesPerSecond=0,
+            percent=100,
         )
     except UpdateCancelled as error:
         _set_job(

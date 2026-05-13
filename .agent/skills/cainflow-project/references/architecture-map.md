@@ -2,7 +2,7 @@
 
 当你需要判断代码该放哪里，或者应该先看哪些文件时，使用这份速查表。
 
-> 当前版本：v2.8.0
+> 当前版本：v2.8.1
 
 ## 近期约定
 
@@ -14,9 +14,11 @@
 
 ### 在线更新约定
 
-- 直接下载更新入口统一在 `js/features/update/update-manager.js`，设置页只通过 `js/features/settings/settings-controller.js` 调用该能力；下载前要提示 GitHub 网络环境可能导致速度不稳定，下载中要显示进度和速度，并支持用户取消。
-- 后端下载能力分为 `backend/routes/update_routes.py` 与 `backend/services/update_service.py`：只从最新 GitHub Release ZIP 中提取 `CainFlow.exe`，覆盖 `backend/config.py` 的 `MAIN_EXE_PATH`，不要整包解压，避免误覆盖工作流、配置或其他文件。
+- 直接下载更新入口统一在 `js/features/update/update-manager.js`，设置页只通过 `js/features/settings/settings-controller.js` 调用该能力；下载前要提示 GitHub 网络环境可能导致速度不稳定，下载中要显示进度、百分比和速度，并支持用户取消。
+- 下载进度必须在右下角 `#toast-container` 常驻显示，通知卡片由 `update-manager.js` 创建和更新，样式在 `css/legacy.css` / `css/themes.css`；更新完成、取消或失败前不要让进度卡片自动消失。
+- 后端下载能力分为 `backend/routes/update_routes.py` 与 `backend/services/update_service.py`：只从最新 GitHub Release ZIP 中提取 `CainFlow.exe`，覆盖 `backend/config.py` 的 `MAIN_EXE_PATH`，不要整包解压，避免误覆盖工作流、配置或其他文件；进度总量优先使用 GitHub Release asset 的 `size`，完成态必须回传顶层 `downloadedBytes` / `totalBytes` / `percent=100`。
 - 下载取消、窗口关闭取消、失败和完成后都要清理 `.download`、提取中间文件与 Release ZIP；如果 Windows 锁住正在运行的主程序，应留下待替换文件和重试替换脚本，并提示用户重启 CainFlow 主程序。
+- 前端收到完成态后要先把右下角进度条渲染到 100%，再延迟弹出重启提示；不要让 `alert()` 或同步弹窗阻塞 100% 进度帧的绘制。
 
 ### 设置页视觉规范
 
@@ -125,7 +127,7 @@
 | UI 总控 | `js/features/ui/ui-controller.js` | UI 层模块统一初始化与依赖注入 |
 | UI 工具 | `js/features/ui/ui-utils.js` | UI 层通用辅助函数 |
 | **更新** | | |
-| 在线更新 | `js/features/update/update-manager.js` | GitHub Release 版本对比、更新提示、直接下载更新、下载进度/速度显示、取消下载、窗口关闭取消与重启提示 |
+| 在线更新 | `js/features/update/update-manager.js` | GitHub Release 版本对比、更新提示、直接下载更新、右下角常驻下载进度/速度/百分比通知、取消下载、窗口关闭取消、100% 后重启提示 |
 | **工作流** | | |
 | 工作流管理 | `js/features/workflow/workflow-manager.js` | 工作流列表、保存、加载、删除、重命名编排；列表按钮与右键菜单共用重命名逻辑，前端负责空名/同名/非法字符/重名校验；保存时只写画布、节点、连线和版本号 |
 
@@ -170,7 +172,7 @@
 | 代理服务 | `backend/services/proxy_service.py` | 上游代理与请求转发 |
 | 安全服务 | `backend/services/security_service.py` | 允许主机列表、代理检测、安全路径与 URL 校验 |
 | 工作流服务 | `backend/services/workflow_service.py` | 工作流列表、读取、保存、重命名、删除；重命名时禁止静默覆盖已有工作流 |
-| 更新服务 | `backend/services/update_service.py` | GitHub Release ZIP 下载任务、进度/速度、取消清理、只提取 `CainFlow.exe`、覆盖 `MAIN_EXE_PATH`、Windows 待替换脚本 |
+| 更新服务 | `backend/services/update_service.py` | GitHub Release ZIP 下载任务、进度/速度/百分比、Release asset size 总量、完成态 100%、取消清理、只提取 `CainFlow.exe`、覆盖 `MAIN_EXE_PATH`、Windows 待替换脚本 |
 
 ---
 
@@ -284,7 +286,7 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - 通用设置是设置面板里的独立视觉区域：卡片结构继续由 `js/features/settings/settings-controller.js` 渲染，布局和视觉收敛到 `css/features/settings.css`。优先使用统一 grid（例如 `general-settings-grid` / `general-settings-card`）和统一的滑动开关 `toggle-switch` / `toggle-slider`，不要在通用设置里继续堆内联布局、混用 checkbox 外观或把样式加回 `css/legacy.css`。
 - 代理安全策略的职责边界要固定：允许域名、内置默认放行域名、私网/本机阻断、`allowPrivateNetworkTargets` 逻辑都收在 `backend/services/security_service.py`；`backend/services/proxy_service.py` 只负责读取请求头并调用校验；前端安全开关与允许域名维护入口在 `js/features/settings/settings-controller.js`；统一中文错误提示在 `js/services/api-client.js`；更新检查如需复用这套提示，走 `js/features/update/update-manager.js`。
 - 项目内建功能依赖的官方域名也属于默认允许名单的一部分，而不只是第三方 API 供应商域名。当前更新检查依赖 `api.github.com` / `github.com`，调整 SSRF 默认策略时要把这些项目自用域名一起纳入考虑，避免误拦截。
-- 在线更新的前端状态、通知、下载进度/速度、取消按钮、关闭窗口确认和关闭后自动取消都收在 `js/features/update/update-manager.js`；设置页只展示入口和状态，不另写下载逻辑。后端更新路由只做接口分发，下载、取消、临时文件清理、Release ZIP 选择、`CainFlow.exe` 提取和主程序替换都放 `backend/services/update_service.py`。更新服务必须只提取并校验 Windows 主程序文件，不允许整包解压；目标路径使用 `backend/config.py` 的 `MAIN_EXE_PATH`，打包后应指向 `sys.executable`。取消、失败、完成和下次启动都要清理未完成下载与 ZIP 临时文件；运行中的 EXE 被锁住时，使用待替换文件加重试脚本完成覆盖，并提示用户重启 CainFlow 主程序。
+- 在线更新的前端状态、通知、下载进度/速度/百分比、取消按钮、关闭窗口确认和关闭后自动取消都收在 `js/features/update/update-manager.js`；设置页只展示入口和状态，不另写下载逻辑。右下角常驻下载进度通知挂到 `#toast-container`，样式在 `css/legacy.css` / `css/themes.css`，普通 Toast 可以自动消失，但更新下载进度卡片在完成、取消或失败前必须常驻。后端更新路由只做接口分发，下载、取消、临时文件清理、Release ZIP 选择、`CainFlow.exe` 提取和主程序替换都放 `backend/services/update_service.py`。更新服务必须只提取并校验 Windows 主程序文件，不允许整包解压；目标路径使用 `backend/config.py` 的 `MAIN_EXE_PATH`，打包后应指向 `sys.executable`。下载进度总量优先用 GitHub Release asset 的 `size`，完成态要在顶层状态写入 `downloadedBytes`、`totalBytes` 和 `percent=100`；前端收到完成态后先渲染 100% 进度，再延迟弹出重启提示，避免 `alert()` 阻塞 100% 进度帧。取消、失败、完成和下次启动都要清理未完成下载与 ZIP 临时文件；运行中的 EXE 被锁住时，使用待替换文件加重试脚本完成覆盖，并提示用户重启 CainFlow 主程序。
 - OpenAI 兼容生图无参考图走 `/v1/images/generations`；有 `image_1` 到 `image_5` 任意参考图走 `/v1/images/edits`。`/images/edits` 必须发送 `multipart/form-data`，图片作为文件字段上传；不要用 JSON `reference_images` 代替 multipart。
 - OpenAI 兼容生图分辨率菜单由 `provider-request-utils.js` 的选项驱动：`自动` 使用空值且不发送 `size`，固定项使用 OpenAI `WxH` size，自定义项由节点 UI 的“宽度输入框 x 高度输入框”拼成 `宽x高`。相关 UI 在 `js/nodes/node-view-factory.js` / `js/nodes/node-dom-bindings.js`，序列化同步更新 `js/nodes/node-serializer.js` 和 `js/features/ui/clipboard-controller.js`。
 - ImageGenerate 生成次数使用 `generationCount`：模板在 `js/nodes/node-view-factory.js`，最小值归一化和 +/- 事件在 `js/nodes/node-dom-bindings.js`，保存/导出在 `js/nodes/node-serializer.js`，复制粘贴在 `js/features/ui/clipboard-controller.js`，执行循环在 `js/features/execution/execution-core.js`。失败不计入次数；自动重试时通过运行时字段 `generationCompletedCount` 保留本轮已成功次数，`js/features/execution/workflow-runner.js` 负责新一轮运行前重置。

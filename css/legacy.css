@@ -2313,6 +2313,79 @@ body {
     border-left: 3px solid var(--accent-orange);
 }
 
+.update-download-toast {
+    order: -100;
+    width: min(380px, calc(100vw - 40px));
+    max-width: min(380px, calc(100vw - 40px));
+    padding: 12px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 3px solid var(--accent-blue);
+}
+
+.update-download-toast__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.update-download-toast__title-wrap {
+    min-width: 0;
+}
+
+.update-download-toast__title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.update-download-toast__subtitle {
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.update-download-toast__cancel {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid rgba(96, 165, 250, 0.32);
+    border-radius: 6px;
+    background: rgba(96, 165, 250, 0.12);
+    color: #bfdbfe;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.update-download-toast__cancel:hover:not(:disabled) {
+    background: rgba(96, 165, 250, 0.2);
+    border-color: rgba(96, 165, 250, 0.48);
+    color: #eff6ff;
+}
+
+.update-download-toast__cancel:disabled {
+    cursor: default;
+    opacity: 0.62;
+}
+
+.update-download-progress--toast {
+    width: 100%;
+}
+
+.update-download-toast .update-download-progress__detail {
+    flex-wrap: wrap;
+}
+
 @keyframes toast-in {
     from {
         opacity: 0;

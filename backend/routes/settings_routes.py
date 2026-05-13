@@ -25,7 +25,7 @@ def _get_provider_models(handler):
 
     headers = {
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.8.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.8.1',
         'Connection': 'close',
     }
     if protocol == 'openai' and apikey:

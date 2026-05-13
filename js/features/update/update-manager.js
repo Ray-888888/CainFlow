@@ -23,11 +23,15 @@ export function createUpdateManager({
     let latestReleaseData = null;
     let updateDownloadInProgress = false;
     let updateDownloadPollTimer = null;
+    let updateDownloadToast = null;
     let activeUpdateJobId = '';
     let handledTerminalUpdateJobId = '';
     const updateDownloadTextKey = 'cainflow_update_download_text';
     const updateDownloadSnapshotKey = 'cainflow_update_download_snapshot';
     const activeDownloadStatuses = new Set(['starting', 'resolving', 'downloading', 'extracting', 'replacing', 'canceling']);
+    const updateDownloadPollIntervalMs = 250;
+    const updateDownloadTerminalToastDelayMs = 1200;
+    const updateDownloadCompletionPromptDelayMs = 450;
 
     function compareVersions(v1, v2) {
         const parse = (value) => {
@@ -213,13 +217,17 @@ export function createUpdateManager({
     function createUpdateDownloadProgressElement(snapshot, message) {
         const wrapper = documentRef.createElement('div');
         wrapper.className = 'update-download-progress';
+        const status = snapshot?.status || '';
+        const isDownloadLike = status === 'downloading' || status === 'completed';
 
         const topRow = documentRef.createElement('div');
         topRow.className = 'update-download-progress__row';
 
         const title = documentRef.createElement('span');
         title.className = 'update-download-progress__title';
-        title.textContent = snapshot?.status === 'downloading' ? '正在下载更新' : (message || '正在准备更新');
+        title.textContent = status === 'completed'
+            ? '下载完成'
+            : (status === 'downloading' ? '正在下载更新' : (message || '正在准备更新'));
         topRow.appendChild(title);
 
         const percent = getDownloadProgressPercent(snapshot);
@@ -247,14 +255,16 @@ export function createUpdateManager({
         const downloaded = formatBytes(snapshot?.downloadedBytes || 0);
         const total = snapshot?.totalBytes ? formatBytes(snapshot.totalBytes) : '未知大小';
         const sizeText = documentRef.createElement('span');
-        sizeText.textContent = snapshot?.status === 'downloading' ? `${downloaded} / ${total}` : (message || '');
+        sizeText.textContent = isDownloadLike ? `${downloaded} / ${total}` : (message || '');
         detailRow.appendChild(sizeText);
 
         const speedText = documentRef.createElement('span');
         const speed = Number(snapshot?.speedBytesPerSecond) || 0;
-        speedText.textContent = snapshot?.status === 'downloading'
+        speedText.textContent = status === 'completed'
+            ? '已完成'
+            : (status === 'downloading'
             ? `速度：${speed > 0 ? formatSpeed(speed) : '等待数据'}`
-            : '';
+            : '');
         detailRow.appendChild(speedText);
         wrapper.appendChild(detailRow);
 
@@ -265,7 +275,142 @@ export function createUpdateManager({
         return snapshot && activeDownloadStatuses.has(snapshot.status || '');
     }
 
+    function removeUpdateDownloadToast() {
+        if (!updateDownloadToast) return;
+        updateDownloadToast.remove();
+        updateDownloadToast = null;
+    }
+
+    function renderUpdateDownloadToast(snapshot, message) {
+        if (!shouldRenderDownloadProgress(snapshot)) {
+            if (!updateDownloadInProgress) removeUpdateDownloadToast();
+            return;
+        }
+
+        const container = getToastContainer();
+        if (!container) return;
+
+        if (!updateDownloadToast || !container.contains(updateDownloadToast)) {
+            updateDownloadToast = documentRef.createElement('div');
+            updateDownloadToast.className = 'toast info update-download-toast';
+            updateDownloadToast.setAttribute('role', 'status');
+            updateDownloadToast.setAttribute('aria-live', 'polite');
+            container.appendChild(updateDownloadToast);
+        }
+
+        updateDownloadToast.textContent = '';
+        updateDownloadToast.classList.toggle('is-canceling', snapshot.status === 'canceling');
+
+        const header = documentRef.createElement('div');
+        header.className = 'update-download-toast__header';
+
+        const titleWrap = documentRef.createElement('div');
+        titleWrap.className = 'update-download-toast__title-wrap';
+
+        const title = documentRef.createElement('div');
+        title.className = 'update-download-toast__title';
+        title.textContent = 'CainFlow 在线更新';
+        titleWrap.appendChild(title);
+
+        const subtitle = documentRef.createElement('div');
+        subtitle.className = 'update-download-toast__subtitle';
+        subtitle.textContent = message || '正在下载更新...';
+        titleWrap.appendChild(subtitle);
+
+        header.appendChild(titleWrap);
+
+        const cancelButton = documentRef.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'update-download-toast__cancel';
+        cancelButton.textContent = snapshot.status === 'canceling' ? '取消中' : '取消';
+        cancelButton.disabled = snapshot.status === 'canceling';
+        cancelButton.onclick = () => {
+            cancelUpdateDownload();
+        };
+        header.appendChild(cancelButton);
+
+        updateDownloadToast.appendChild(header);
+
+        const progress = createUpdateDownloadProgressElement(snapshot, message);
+        progress.classList.add('update-download-progress--toast');
+        updateDownloadToast.appendChild(progress);
+    }
+
+    function getCompletedDownloadSnapshot(snapshot = {}, message = '') {
+        const result = snapshot.result || {};
+        const downloadedBytes = Number(snapshot.downloadedBytes || result.downloadedBytes || 0);
+        const totalBytes = Number(snapshot.totalBytes || result.totalBytes || downloadedBytes || 0);
+        return {
+            ...snapshot,
+            status: 'completed',
+            message,
+            downloadedBytes,
+            totalBytes: totalBytes || downloadedBytes,
+            speedBytesPerSecond: 0,
+            percent: 100
+        };
+    }
+
+    function renderCompletedUpdateDownloadToast(snapshot, message) {
+        const container = getToastContainer();
+        if (!container) return;
+        const finalSnapshot = getCompletedDownloadSnapshot(snapshot, message);
+
+        if (!updateDownloadToast || !container.contains(updateDownloadToast)) {
+            updateDownloadToast = documentRef.createElement('div');
+            container.appendChild(updateDownloadToast);
+        }
+
+        updateDownloadToast.className = 'toast success update-download-toast is-completed';
+        updateDownloadToast.setAttribute('role', 'status');
+        updateDownloadToast.setAttribute('aria-live', 'polite');
+        updateDownloadToast.textContent = '';
+
+        const header = documentRef.createElement('div');
+        header.className = 'update-download-toast__header';
+
+        const titleWrap = documentRef.createElement('div');
+        titleWrap.className = 'update-download-toast__title-wrap';
+
+        const title = documentRef.createElement('div');
+        title.className = 'update-download-toast__title';
+        title.textContent = 'CainFlow 在线更新';
+        titleWrap.appendChild(title);
+
+        const subtitle = documentRef.createElement('div');
+        subtitle.className = 'update-download-toast__subtitle';
+        subtitle.textContent = message || '下载完成，请重启 CainFlow 主程序。';
+        titleWrap.appendChild(subtitle);
+
+        header.appendChild(titleWrap);
+        updateDownloadToast.appendChild(header);
+
+        const progress = createUpdateDownloadProgressElement(finalSnapshot, message);
+        progress.classList.add('update-download-progress--toast');
+        updateDownloadToast.appendChild(progress);
+
+        setTimeoutImpl(removeUpdateDownloadToast, updateDownloadTerminalToastDelayMs);
+    }
+
+    function notifyUpdateDownloadCompleted(jobId, message) {
+        if (handledTerminalUpdateJobId === jobId) return;
+        handledTerminalUpdateJobId = jobId;
+
+        setTimeoutImpl(() => {
+            showToast(message, 'success', 12000);
+            if (typeof windowRef.alert === 'function') {
+                windowRef.alert(`${message}\n\n请重启 CainFlow 主程序。`);
+            }
+        }, updateDownloadCompletionPromptDelayMs);
+    }
+
     function setUpdateDownloadStatus(message = '', type = 'info', snapshot = null) {
+        if (snapshot) {
+            renderUpdateDownloadToast(snapshot, message);
+        } else if (!message && !updateDownloadInProgress) {
+            removeUpdateDownloadToast();
+        }
+
         const status = documentRef.getElementById('update-download-status');
         if (!status) return;
 
@@ -375,6 +520,7 @@ export function createUpdateManager({
             setUpdateError(message);
             setStoredDownloadText('');
             setStoredDownloadSnapshot(null);
+            removeUpdateDownloadToast();
             setUpdateDownloadStatus(message, 'error');
             showToast(message, 'error', 9000);
             renderGeneralSettings();
@@ -517,7 +663,7 @@ export function createUpdateManager({
         }
     }
 
-    function scheduleUpdateDownloadPoll(delayMs = 800) {
+    function scheduleUpdateDownloadPoll(delayMs = updateDownloadPollIntervalMs) {
         clearUpdateDownloadPollTimer();
         if (!updateDownloadInProgress || !activeUpdateJobId) return;
         updateDownloadPollTimer = setTimeoutImpl(pollUpdateDownloadStatus, delayMs);
@@ -537,6 +683,7 @@ export function createUpdateManager({
             setUpdateError(message);
             setStoredDownloadText('');
             setStoredDownloadSnapshot(null);
+            removeUpdateDownloadToast();
             setUpdateDownloadStatus(message, 'error');
             showToast(message, 'error', 7000);
             renderGeneralSettings();
@@ -568,6 +715,7 @@ export function createUpdateManager({
         if (status === 'completed') {
             const result = snapshot.result || {};
             const successMessage = snapshot.message || result.message || '更新已完成，请重启 CainFlow 主程序。';
+            renderCompletedUpdateDownloadToast(snapshot, successMessage);
             if (result.tagName) localStorageRef.setItem('cainflow_update_version', result.tagName);
             localStorageRef.setItem('cainflow_update_status', 'downloaded');
             clearUpdateError();
@@ -575,17 +723,12 @@ export function createUpdateManager({
             setStoredDownloadSnapshot(null);
             setUpdateDownloadStatus(successMessage, 'success');
             renderGeneralSettings();
-            if (handledTerminalUpdateJobId !== jobId) {
-                handledTerminalUpdateJobId = jobId;
-                showToast(successMessage, 'success', 12000);
-                if (typeof windowRef.alert === 'function') {
-                    windowRef.alert(`${successMessage}\n\n请重启 CainFlow 主程序。`);
-                }
-            }
+            notifyUpdateDownloadCompleted(jobId, successMessage);
             return;
         }
 
         if (status === 'canceled') {
+            removeUpdateDownloadToast();
             const message = snapshot.message || '下载已取消，未完成的临时文件已删除。';
             const latestVersion = localStorageRef.getItem('cainflow_update_version');
             localStorageRef.setItem('cainflow_update_status', latestVersion ? 'new_version' : 'unknown');
@@ -601,6 +744,7 @@ export function createUpdateManager({
         }
 
         if (status === 'error') {
+            removeUpdateDownloadToast();
             const message = snapshot.message || snapshot.error || '下载更新失败，请稍后重试';
             setUpdateError(message);
             setStoredDownloadText('');
@@ -614,6 +758,7 @@ export function createUpdateManager({
             return;
         }
 
+        removeUpdateDownloadToast();
         setStoredDownloadText('');
         setStoredDownloadSnapshot(null);
         if (localStorageRef.getItem('cainflow_update_status') === 'downloading' || localStorageRef.getItem('cainflow_update_status') === 'canceling') {
