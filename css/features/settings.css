@@ -21,6 +21,156 @@
     color: var(--text-primary);
 }
 
+.settings-toolbar-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.settings-inline-help {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--accent-cyan);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.settings-inline-help:hover {
+    color: var(--text-primary);
+}
+
+.api-settings-help-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.api-settings-help-dialog.hidden {
+    display: none;
+}
+
+.api-settings-help-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(4px);
+}
+
+.api-settings-help-panel {
+    position: relative;
+    width: min(720px, calc(100vw - 32px));
+    max-height: min(760px, calc(100vh - 48px));
+    background: rgba(22, 22, 42, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.58);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.api-settings-help-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.api-settings-help-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.api-settings-help-subtitle {
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.api-settings-help-close {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.api-settings-help-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+.api-settings-help-body {
+    overflow: auto;
+    padding: 18px;
+    display: grid;
+    gap: 14px;
+}
+
+.api-settings-help-section {
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+}
+
+.api-settings-help-section h4 {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.api-settings-help-section p,
+.api-settings-help-section li {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.api-settings-help-section p {
+    margin: 0 0 8px;
+}
+
+.api-settings-help-section p:last-child {
+    margin-bottom: 0;
+}
+
+.api-settings-help-section ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.api-settings-help-section code {
+    padding: 2px 5px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: var(--accent-cyan);
+    font-size: 12px;
+}
+
 .provider-models-dialog {
     position: fixed;
     inset: 0;
@@ -551,6 +701,43 @@ html[data-app-theme="light"] .card-btn-fetch-models:hover {
     color: #0f766e;
 }
 
+html[data-app-theme="light"] .settings-inline-help {
+    color: #0f766e;
+}
+
+html[data-app-theme="light"] .settings-inline-help:hover {
+    color: #134e4a;
+}
+
+html[data-app-theme="light"] .api-settings-help-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(244, 247, 252, 0.98));
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 24px 68px rgba(15, 23, 42, 0.18);
+}
+
+html[data-app-theme="light"] .api-settings-help-header {
+    border-color: rgba(148, 163, 184, 0.24);
+}
+
+html[data-app-theme="light"] .api-settings-help-subtitle {
+    color: #718096;
+}
+
+html[data-app-theme="light"] .api-settings-help-section {
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(148, 163, 184, 0.22);
+}
+
+html[data-app-theme="light"] .api-settings-help-section p,
+html[data-app-theme="light"] .api-settings-help-section li {
+    color: #4b5870;
+}
+
+html[data-app-theme="light"] .api-settings-help-section code {
+    background: rgba(15, 118, 110, 0.09);
+    color: #0f766e;
+}
+
 html[data-app-theme="light"] .provider-models-panel {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(244, 247, 252, 0.98));
     border-color: rgba(148, 163, 184, 0.28);
@@ -619,6 +806,19 @@ html[data-app-theme="light"] .provider-models-add:disabled {
 }
 
 @media (max-width: 640px) {
+    .settings-toolbar-title {
+        width: 100%;
+    }
+
+    .api-settings-help-panel {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 28px);
+    }
+
+    .api-settings-help-body {
+        padding: 12px;
+    }
+
     .provider-models-search-row {
         grid-template-columns: 1fr;
     }

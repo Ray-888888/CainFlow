@@ -563,6 +563,74 @@ export function createSettingsControllerApi({
         modelFetchDialogState.status = '';
     }
 
+    function getApiSettingsHelpDialog() {
+        let dialog = documentRef.getElementById('api-settings-help-dialog');
+        if (dialog) return dialog;
+
+        dialog = documentRef.createElement('div');
+        dialog.id = 'api-settings-help-dialog';
+        dialog.className = 'api-settings-help-dialog hidden';
+        (documentRef.body || settingsModal).appendChild(dialog);
+        return dialog;
+    }
+
+    function closeApiSettingsHelpDialog() {
+        getApiSettingsHelpDialog().classList.add('hidden');
+    }
+
+    function renderApiSettingsHelpDialog() {
+        const dialog = getApiSettingsHelpDialog();
+        dialog.innerHTML = `
+            <div class="api-settings-help-backdrop" data-close-api-help="true"></div>
+            <div class="api-settings-help-panel" role="dialog" aria-modal="true" aria-labelledby="api-settings-help-title">
+                <div class="api-settings-help-header">
+                    <div>
+                        <h3 id="api-settings-help-title">API 设置帮助</h3>
+                        <div class="api-settings-help-subtitle">从密钥到模型，按这几步填就能跑起来。</div>
+                    </div>
+                    <button type="button" class="api-settings-help-close" data-close-api-help="true" title="关闭">×</button>
+                </div>
+                <div class="api-settings-help-body">
+                    <section class="api-settings-help-section">
+                        <h4>1. 创建或复制 API 密钥</h4>
+                        <p>先到你的模型服务商控制台创建 API Key。常见位置是“API Keys”“开发者”“密钥管理”或“令牌”。复制后粘贴到 CainFlow 的“API 密钥”输入框。</p>
+                        <p>不要发给他人，也不要写进工作流文件或截图里。</p>
+                    </section>
+                    <section class="api-settings-help-section">
+                        <h4>2. 设置 API 供应商</h4>
+                        <ul>
+                            <li><strong>供应商名称：</strong>随便起一个好认的名字，例如 Gemini、OpenAI、公司网关。</li>
+                            <li><strong>API 密钥：</strong>填写服务商给你的 Key。如果使用本地接口且不需要密钥，可以留空。</li>
+                            <li><strong>API 地址：</strong>填写服务商的基础地址，例如 <code>https://api.openai.com</code> 或 <code>https://generativelanguage.googleapis.com</code>。</li>
+                            <li><strong>自动补全：</strong>推荐开启。CainFlow 会按模型协议自动补齐 <code>/v1/chat/completions</code>、Gemini 路径或生图路径。</li>
+                        </ul>
+                    </section>
+                    <section class="api-settings-help-section">
+                        <h4>3. 添加模型并绑定供应商</h4>
+                        <p>供应商保存后，可以点击“获取模型列表”自动拉取，也可以在“模型管理”里手动添加模型 ID。模型需要绑定到可用供应商，节点里的模型下拉才会出现。</p>
+                        <ul>
+                            <li>对话模型选择“对话”，用于 TextChat 等文本生成节点。</li>
+                            <li>图片模型选择“生图”，用于 ImageGenerate 等图片生成节点。</li>
+                            <li>OpenAI 兼容服务通常选 OpenAI 协议；Gemini 官方接口选 Gemini / Google 协议。</li>
+                        </ul>
+                    </section>
+                    <section class="api-settings-help-section">
+                        <h4>4. 常见问题</h4>
+                        <ul>
+                            <li>请求失败或超时：检查 API 地址、密钥、代理设置，以及供应商后台余额或权限。</li>
+                            <li>本地或局域网接口无法访问：到“常规设置 > 安全”开启“允许内网 / 本地 API 地址”。</li>
+                            <li>节点找不到模型：确认模型已经添加，并且绑定了当前存在的供应商。</li>
+                        </ul>
+                    </section>
+                </div>
+            </div>
+        `;
+        dialog.classList.remove('hidden');
+        dialog.querySelectorAll('[data-close-api-help="true"]').forEach((element) => {
+            element.addEventListener('click', closeApiSettingsHelpDialog);
+        });
+    }
+
     function renderProviderModelsDialog(options = {}) {
         const dialog = getProviderModelsDialog();
         const previousListScrollTop = options.preserveListScroll
@@ -1609,13 +1677,19 @@ export function createSettingsControllerApi({
             settingsModalApi.openSettingsModal();
         });
         documentRef.getElementById('settings-close').addEventListener('click', () => {
+            closeApiSettingsHelpDialog();
+            closeProviderModelsDialog();
             settingsModalApi.closeSettingsModal(() => state.notificationAudio?.pause());
         });
         settingsModal.addEventListener('click', (e) => {
             if (e.target === settingsModal) {
+                closeApiSettingsHelpDialog();
+                closeProviderModelsDialog();
                 settingsModalApi.closeSettingsModal(() => state.notificationAudio?.pause());
             }
         });
+
+        documentRef.getElementById('btn-api-settings-help')?.addEventListener('click', renderApiSettingsHelpDialog);
 
         documentRef.querySelectorAll('.modal-tab-btn').forEach((btn) => {
             btn.addEventListener('click', () => {

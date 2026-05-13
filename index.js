@@ -313,7 +313,7 @@ function initFloatingNotices() {
         priority: 10,
         className: 'workflow-backup-notice',
         icon: '!',
-        content: ['及时备份 ', { code: true, text: 'workflows' }, ' 里的工作流，防止更新后丢失'],
+        content: ['及时备份 ', { code: true, text: 'workflows文件夹' }, ' 里的工作流，防止更新后丢失'],
         dismissible: true,
         closeLabel: '关闭工作流备份提醒'
     });

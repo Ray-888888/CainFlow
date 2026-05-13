@@ -17,6 +17,7 @@
 - 通用设置布局、卡片留白、字号、开关样式统一收口在 `js/features/settings/settings-controller.js` 与 `css/features/settings.css`。
 - 优先复用 `general-settings-grid` / `general-settings-card` 和 `toggle-switch` / `toggle-slider`，不要把设置页继续做成内联样式拼装区。
 - 新增按钮、图标按钮或按钮组时，要把按钮周围留白也当成正式需求：避免贴着文字、标签、端口、输入框或其他控件；如果按钮位置异常，先检查是否被全局定位或通用样式误伤。
+- API 供应商标题旁的新手帮助入口属于设置面板上下文帮助：入口结构在 `index.html`，帮助弹窗 DOM 创建、文案渲染与关闭事件在 `js/features/settings/settings-controller.js`，视觉样式在 `css/features/settings.css`。它不是全局“操作帮助”面板，不要改到 `js/features/help/help-panel.js` 或 `css/legacy.css`。
 - 安全相关开关应放在独立安全卡片中展示，新增高风险选项时同步检查状态默认值与持久化链路。
 
 ### 固定结构节点缩放约定
@@ -100,7 +101,7 @@
 | 工作流模型引用解析 | `js/features/persistence/workflow-model-resolver.js` | 旧工作流模型 ID 到当前模型配置的自动匹配；缺失模型或供应商引用提示 |
 | 会话管理 | `js/features/persistence/session-manager.js` | 自动保存、页面关闭前恢复等会话持久化 |
 | **设置** | | |
-| 设置控制器 | `js/features/settings/settings-controller.js` | 设置数据逻辑、API 供应商与模型管理、供应商模型列表获取弹窗、搜索与添加模型、持久化、代理检测、版本更新、画布连线设置、通用设置卡片布局与安全开关 |
+| 设置控制器 | `js/features/settings/settings-controller.js` | 设置数据逻辑、API 供应商与模型管理、供应商模型列表获取弹窗、API 设置帮助弹窗、搜索与添加模型、持久化、代理检测、版本更新、画布连线设置、通用设置卡片布局与安全开关 |
 | 设置弹窗 | `js/features/settings/settings-modal.js` | 设置弹窗开关与标签页 UI 行为 |
 | **UI 控制器** | | |
 | 剪贴板 | `js/features/ui/clipboard-controller.js` | 节点复制粘贴、剪贴板操作、节点配置字段复制 |
@@ -112,6 +113,7 @@
 | 主题切换 | `js/features/ui/theme-controller.js` | 明暗主题切换与持久化 |
 | 全局动画 | `js/features/ui/animation-controller.js` | 将 `globalAnimationEnabled` 应用到根节点 CSS 类，并同步旧的连线动画兼容字段 |
 | Toast 通知 | `js/features/ui/toast-controller.js` | Toast 消息弹出与自动消失 |
+| 左上角悬浮通知 | `js/features/ui/floating-notices-controller.js`, `index.js`, `js/features/update/update-manager.js` | 画布左上角通知条；固定启动通知在 `index.js` 的 `initFloatingNotices()`，更新提醒在 `showUpdateCanvasNotice()` |
 | 工具栏 | `js/features/ui/toolbar-controller.js` | 顶部工具栏按钮绑定与状态同步 |
 | UI 总控 | `js/features/ui/ui-controller.js` | UI 层模块统一初始化与依赖注入 |
 | UI 工具 | `js/features/ui/ui-utils.js` | UI 层通用辅助函数 |
@@ -171,7 +173,7 @@
 | Base | `css/base/variables.css` | 主题变量与全局令牌 |
 | Layout | `css/layout/layout.css` | 应用整体布局与面板排布 |
 | Components | `css/components/nodes.css` | 可复用的节点与组件样式；图片对比节点、高级全屏对比、A/B 互斥裁切、缩略图选择网格、展开选图态和对比舞台缩放/平移光标样式 |
-| Features | `css/features/panels.css`, `css/features/settings.css` | 功能区或面板专属样式；设置面板新增交互（如供应商模型列表弹窗、获取模型列表按钮、通用设置卡片 grid、统一滑动开关样式）放 `settings.css` |
+| Features | `css/features/panels.css`, `css/features/settings.css` | 功能区或面板专属样式；设置面板新增交互（如供应商模型列表弹窗、API 设置帮助弹窗、获取模型列表按钮、通用设置卡片 grid、统一滑动开关样式）放 `settings.css` |
 | Themes | `css/themes.css` | 主题切换相关样式（明暗模式等） |
 | Legacy | `css/legacy.css` | 兼容层与遗留样式承接 |
 
@@ -191,7 +193,7 @@
 | 修复禁用节点仍影响下游、缓存输出穿透或禁用后预览未断流 | `js/features/execution/workflow-runner.js`, `js/features/execution/execution-core.js`, `js/features/media/media-controller.js`, `js/nodes/node-lifecycle.js` |
 | 修改节点端口位置、输入/输出端口顶部对齐或端口行结构 | `js/nodes/node-view-factory.js`, `css/legacy.css`, `js/canvas/connections.js` |
 | 修复设置面板或代理设置交互 | `js/features/settings/settings-modal.js`, `js/features/settings/settings-controller.js`, `backend/routes/settings_routes.py`, `backend/services/security_service.py` |
-| 修改 API 供应商卡片、获取模型列表弹窗、模型搜索或添加模型到模型管理 | `js/features/settings/settings-controller.js`, `js/services/api-client.js`, `js/features/execution/provider-request-utils.js`, `css/features/settings.css`, `index.css` |
+| 修改 API 供应商卡片、API 设置帮助入口、获取模型列表弹窗、模型搜索或添加模型到模型管理 | `index.html`, `js/features/settings/settings-controller.js`, `js/services/api-client.js`, `js/features/execution/provider-request-utils.js`, `css/features/settings.css`, `index.css` |
 | 调整通用设置卡片布局、字号、留白、对齐或统一开关样式 | `js/features/settings/settings-controller.js`, `css/features/settings.css`, `css/themes.css` |
 | 调整代理白名单、私网访问开关、`Target URL is not allowed` 类提示 | `backend/services/security_service.py`, `backend/services/proxy_service.py`, `js/services/api-client.js`, `js/features/settings/settings-controller.js`, `js/features/update/update-manager.js` |
 | 修复历史记录面板 | `js/features/history/history-panel.js`, `js/features/history/history-preview.js`, `js/features/history/history-fullscreen.js`, `js/features/history/history-utils.js`, `js/services/storage-idb.js` |
@@ -226,6 +228,7 @@
 | 自动保存 / 会话恢复 | `js/features/persistence/session-manager.js` |
 | 主题切换 | `js/features/ui/theme-controller.js`, `css/themes.css` |
 | Toast 通知 | `js/features/ui/toast-controller.js` |
+| 画布左上角悬浮通知 | `index.js` 的 `initFloatingNotices()`, `js/features/ui/floating-notices-controller.js`, `js/features/update/update-manager.js`, `css/legacy.css`, `css/themes.css` |
 | 键盘快捷键 / 全局事件 | `js/features/ui/global-interactions.js` |
 | 剪贴板操作 | `js/features/ui/clipboard-controller.js` |
 | 右键菜单 | `js/features/ui/context-menu-controller.js` |
@@ -268,6 +271,7 @@ grep -r "handle_get\|handle_post\|handle_delete\|def " backend --include="*.py"
 - 运行中节点锁定由 `state.runningNodeIds` 驱动：正在运行的节点不能编辑、移动、缩放、删除、禁用或改连线，但允许复制/克隆；右键运行其他未运行节点时只阻止运行范围与 `runningNodeIds` 重叠，不再用全局 `state.isRunning` 阻止所有运行入口。
 - 供应商协议、模型能力、模型用途/协议归一化、OpenAI/Gemini 生图请求路径、请求体和分辨率预设优先放 `js/features/execution/provider-request-utils.js`；实际执行时的取 DOM 值、选择 JSON 或 multipart、调用 `/proxy` 放 `js/features/execution/execution-core.js`。
 - 设置面板里的 API 供应商/模型管理继续放 `js/features/settings/settings-controller.js`：供应商卡片操作、获取模型列表按钮、模型列表弹窗、搜索、滚动位置保留、调用 `/proxy` 获取 OpenAI 兼容 `/v1/models` 或 Google `/v1beta/models`、添加条目到 `state.models` 都属于这里。调用代理请求头时复用 `js/services/api-client.js`；添加模型时要同步遵守 `provider-request-utils.js` 的用途与协议归一化，GPT/DALL-E/OpenAI 类模型用 OpenAI 兼容格式，Gemini 用 Google 格式，banana/imagen/image 类模型归为生图。
+- API 设置帮助属于设置面板内的轻量弹窗能力：标题旁入口只在 `index.html` 放静态按钮，弹窗内容和事件由 `settings-controller.js` 渲染管理，关闭按钮、遮罩关闭和设置弹窗关闭时的清理都应在同一控制器中处理；样式集中到 `css/features/settings.css` 并补浅色主题覆盖。
 - 通用设置是设置面板里的独立视觉区域：卡片结构继续由 `js/features/settings/settings-controller.js` 渲染，布局和视觉收敛到 `css/features/settings.css`。优先使用统一 grid（例如 `general-settings-grid` / `general-settings-card`）和统一的滑动开关 `toggle-switch` / `toggle-slider`，不要在通用设置里继续堆内联布局、混用 checkbox 外观或把样式加回 `css/legacy.css`。
 - 代理安全策略的职责边界要固定：允许域名、内置默认放行域名、私网/本机阻断、`allowPrivateNetworkTargets` 逻辑都收在 `backend/services/security_service.py`；`backend/services/proxy_service.py` 只负责读取请求头并调用校验；前端安全开关与允许域名维护入口在 `js/features/settings/settings-controller.js`；统一中文错误提示在 `js/services/api-client.js`；更新检查如需复用这套提示，走 `js/features/update/update-manager.js`。
 - 项目内建功能依赖的官方域名也属于默认允许名单的一部分，而不只是第三方 API 供应商域名。当前更新检查依赖 `api.github.com` / `github.com`，调整 SSRF 默认策略时要把这些项目自用域名一起纳入考虑，避免误拦截。
