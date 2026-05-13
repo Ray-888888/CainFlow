@@ -3,6 +3,7 @@
  */
 import {
     APP_VERSION,
+    AUTO_UPDATE_CHECK_DISABLED,
     DB_NAME,
     GITHUB_REPO,
     STORAGE_KEY,
@@ -355,6 +356,7 @@ function initFloatingNotices() {
 const updateManager = createUpdateManager({
     appVersion: APP_VERSION,
     githubRepo: GITHUB_REPO,
+    autoUpdateCheckDisabled: AUTO_UPDATE_CHECK_DISABLED,
     getProxyHeaders,
     showToast,
     renderGeneralSettings: () => settingsControllerApi?.renderGeneralSettings(),

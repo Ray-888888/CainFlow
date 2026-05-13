@@ -11,6 +11,7 @@ export function createUpdateManager({
     renderGeneralSettings,
     exportWorkflow,
     floatingNoticesApi = null,
+    autoUpdateCheckDisabled = false,
     documentRef = document,
     windowRef = window,
     localStorageRef = localStorage,
@@ -32,6 +33,13 @@ export function createUpdateManager({
     const updateDownloadPollIntervalMs = 250;
     const updateDownloadTerminalToastDelayMs = 1200;
     const updateDownloadCompletionPromptDelayMs = 450;
+
+    function isAutoUpdateCheckDisabled() {
+        if (typeof autoUpdateCheckDisabled === 'function') {
+            return autoUpdateCheckDisabled() === true;
+        }
+        return autoUpdateCheckDisabled === true;
+    }
 
     function compareVersions(v1, v2) {
         const parse = (value) => {
@@ -837,9 +845,19 @@ export function createUpdateManager({
         }
         dismissAutoCheckCountdownToast();
 
+        if (isAutoUpdateCheckDisabled()) {
+            return false;
+        }
+
         const targetTime = Date.now() + delayMs;
 
         const tick = () => {
+            if (isAutoUpdateCheckDisabled()) {
+                autoCheckCountdownTimer = null;
+                dismissAutoCheckCountdownToast();
+                return;
+            }
+
             const remainingMs = targetTime - Date.now();
             const secondsRemaining = Math.ceil(remainingMs / 1000);
 
@@ -864,6 +882,7 @@ export function createUpdateManager({
         };
 
         tick();
+        return true;
     }
 
     async function checkUpdate(isManual = false, options = {}) {

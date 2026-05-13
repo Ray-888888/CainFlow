@@ -5,6 +5,9 @@ export const APP_VERSION = 'v2.8.1';
 export const GITHUB_REPO = 'RingoCaviar/CainFlow';
 export const STORAGE_KEY = 'nodeflow_ai_state';
 
+// 改成 true 后会关闭启动时的自动更新检测；手动检查与下载更新仍可使用。
+export const AUTO_UPDATE_CHECK_DISABLED = false;
+
 // 改成 true 后会锁定 API 供应商：隐藏新增/删除入口，并禁止修改供应商 API 地址。
 export const API_PROVIDERS_LOCKED = false;
 

@@ -18,7 +18,7 @@ import {
     validateOpenAiImageSize
 } from '../execution/provider-request-utils.js';
 import { createProxyHeadersGetter } from '../../services/api-client.js';
-import { API_PROVIDERS_LOCKED } from '../../core/constants.js';
+import { API_PROVIDERS_LOCKED, AUTO_UPDATE_CHECK_DISABLED } from '../../core/constants.js';
 
 export function createSettingsControllerApi({
     appVersion,
@@ -1287,6 +1287,37 @@ export function createSettingsControllerApi({
             updateActionButtonHtml = '<button class="btn btn-secondary" style="width:100%;" disabled>正在取消...</button>';
         }
 
+        const updateSettingsCardHtml = AUTO_UPDATE_CHECK_DISABLED ? '' : `
+            <div class="api-config-card general-settings-card general-settings-card--update" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">系统版本与更新</span>
+                </div>
+                <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="card-field">
+                        <label>当前版本与检查结果</label>
+                        <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
+                            <div class="general-settings-update-header" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                                <span class="version-badge">${appVersion}</span>
+                                <div class="update-status-indicator">${statusHtml}</div>
+                            </div>
+                            <div class="update-version-summary">
+                                <span>本地版本</span>
+                                <strong>${appVersion}</strong>
+                                <span>服务端版本</span>
+                                <strong>${serverVersionText}</strong>
+                            </div>
+                            ${updateDownloadProgressHtml}
+                            <div class="general-settings-update-actions" style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                                ${updateActionButtonHtml}
+                                <button id="btn-check-update" class="btn btn-secondary" style="width:100%;">检查更新</button>
+                            </div>
+                        </div>
+                        <p style="font-size:11px; color:var(--text-dim); margin-top:8px;">最后检查: ${timeStr}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
         list.innerHTML = `
         <div class="general-settings-grid">
             <div class="api-config-card general-settings-card" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
@@ -1427,34 +1458,7 @@ export function createSettingsControllerApi({
                 </div>
             </div>
 
-            <div class="api-config-card general-settings-card general-settings-card--update" style="flex: 1; margin-top: 0; display: flex; flex-direction: column;">
-                <div class="card-header">
-                    <span style="font-size:14px; font-weight:500; color:var(--text-secondary)">系统版本与更新</span>
-                </div>
-                <div class="card-row" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="card-field">
-                        <label>当前版本与检查结果</label>
-                        <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                            <div class="general-settings-update-header" style="display:flex; align-items:center; justify-content:space-between; width:100%;">
-                                <span class="version-badge">${appVersion}</span>
-                                <div class="update-status-indicator">${statusHtml}</div>
-                            </div>
-                            <div class="update-version-summary">
-                                <span>本地版本</span>
-                                <strong>${appVersion}</strong>
-                                <span>服务端版本</span>
-                                <strong>${serverVersionText}</strong>
-                            </div>
-                            ${updateDownloadProgressHtml}
-                            <div class="general-settings-update-actions" style="display:flex; flex-direction:column; gap:8px; width:100%;">
-                                ${updateActionButtonHtml}
-                                <button id="btn-check-update" class="btn btn-secondary" style="width:100%;">检查更新</button>
-                            </div>
-                        </div>
-                        <p style="font-size:11px; color:var(--text-dim); margin-top:8px;">最后检查: ${timeStr}</p>
-                    </div>
-                </div>
-            </div>
+            ${updateSettingsCardHtml}
         </div>
     `;
 
