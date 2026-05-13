@@ -266,6 +266,11 @@ export function createWorkflowManagerApi({
             const name = inputName.value.trim();
             if (!name) return showToast('请输入工作流名称', 'warning');
 
+            const names = await fetchWorkflows();
+            if (names.includes(name) && !windowRef.confirm(`已存在名为「${name}」的工作流，是否覆盖？`)) {
+                return;
+            }
+
             const data = {
                 canvas: { x: state.canvas.x, y: state.canvas.y, zoom: state.canvas.zoom },
                 nodes: nodeSerializer.serializeNodes(),

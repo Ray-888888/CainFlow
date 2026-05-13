@@ -7,6 +7,7 @@ import webbrowser
 from backend import config
 from backend.handler import ProxyHTTPRequestHandler
 from backend.services.security_service import load_allowed_hosts
+from backend.services.update_service import cleanup_update_temp_files
 
 socket.setdefaulttimeout(300)
 socketserver.TCPServer.allow_reuse_address = True
@@ -48,6 +49,7 @@ def print_banner():
 def run():
     os.chdir(config.STATIC_ROOT)
     config.ensure_runtime_dirs()
+    cleanup_update_temp_files()
     load_allowed_hosts()
     if config.is_port_in_use(config.PORT):
         print_port_error_and_exit()

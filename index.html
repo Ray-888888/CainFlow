@@ -1032,9 +1032,11 @@
                         <strong>更新前请务必手动备份：</strong> 更新前一定要手动备份项目 <code>workflows</code> 文件夹里的工作流 JSON。下方导出按钮只能辅助备份当前画布，不能替代复制整个 <code>workflows</code> 目录。
                     </div>
                 </div>
+                <div id="update-download-status" class="update-download-status hidden"></div>
             </div>
             <div class="modal-footer" style="padding: 16px 24px; display: flex; gap: 12px; justify-content: flex-end;">
                 <button id="btn-update-backup" class="btn btn-secondary">导出当前工作流备份</button>
+                <button id="btn-update-cancel" class="btn btn-secondary hidden">取消下载</button>
                 <button id="btn-update-download" class="btn btn-primary">前往下载最新版</button>
             </div>
         </div>

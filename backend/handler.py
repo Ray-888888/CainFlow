@@ -1,7 +1,7 @@
 import http.server
 
 from backend import state
-from backend.routes import settings_routes, workflow_routes
+from backend.routes import settings_routes, update_routes, workflow_routes
 from backend.services.http_helpers import write_error, write_text
 from backend.services.log_service import should_log_path, start_request_log
 from backend.services.proxy_service import handle_proxy_request
@@ -24,6 +24,8 @@ class ProxyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self._begin_request_log()
         try:
+            if update_routes.handle_get(self):
+                return
             if workflow_routes.handle_get(self):
                 return
             if settings_routes.handle_get(self):
@@ -60,6 +62,8 @@ class ProxyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._begin_request_log()
         try:
             if settings_routes.handle_post(self):
+                return
+            if update_routes.handle_post(self):
                 return
             if self.path == '/proxy':
                 handle_proxy_request(self)

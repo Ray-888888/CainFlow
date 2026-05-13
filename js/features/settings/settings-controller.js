@@ -34,6 +34,8 @@ export function createSettingsControllerApi({
     saveState,
     addLog,
     checkUpdate,
+    downloadLatestUpdate = () => {},
+    cancelUpdateDownload = () => {},
     updateAllConnections = () => {},
     applyGlobalAnimationSetting = () => {},
     fitNodeToContent = () => {},
@@ -1162,6 +1164,7 @@ export function createSettingsControllerApi({
         const lastCheck = localStorageRef.getItem('cainflow_last_update_check');
         const latestVer = localStorageRef.getItem('cainflow_update_version') || '';
         const updateError = localStorageRef.getItem('cainflow_update_error') || '检查失败，请检查网络连接或代理设置';
+        const updateDownloadText = localStorageRef.getItem('cainflow_update_download_text') || '';
         const serverVersionText = latestVer || (updateStatus === 'checking' ? '检查中...' : '尚未获取');
         const escapeHtml = (value) => String(value || '')
             .replace(/&/g, '&amp;')
@@ -1174,15 +1177,27 @@ export function createSettingsControllerApi({
         const timeStr = lastCheck ? new Date(parseInt(lastCheck, 10)).toLocaleString() : '从未检查';
 
         if (updateStatus === 'checking') statusHtml = `<span class="update-status-loading">正在检查中...</span>`;
+        else if (updateStatus === 'downloading') statusHtml = `<span class="update-status-loading">${escapeHtml(updateDownloadText || '正在下载更新...')}</span>`;
+        else if (updateStatus === 'canceling') statusHtml = `<span class="update-status-loading">${escapeHtml(updateDownloadText || '正在取消下载...')}</span>`;
+        else if (updateStatus === 'downloaded') statusHtml = `<span class="update-status-latest">✓ 更新已完成，请重启 CainFlow 主程序</span>`;
         else if (updateStatus === 'latest') statusHtml = `<span class="update-status-latest">✓ 当前已是最新版本</span>`;
         else if (updateStatus === 'new_version') {
             statusHtml = `
                 <div class="general-settings-status-row">
                     <span class="update-status-new">发现新版本 ${latestVer}</span>
-                    <button class="btn btn-secondary btn-sm" data-action="goto-download" style="animation: glow-pulse 2.5s infinite">前往下载</button>
+                    <button class="btn btn-secondary btn-sm" data-action="download-update" style="animation: glow-pulse 2.5s infinite">下载并更新</button>
                 </div>
             `;
         } else if (updateStatus === 'error') statusHtml = `<span class="update-status-error" title="${escapeHtml(updateError)}">✗ ${escapeHtml(updateError)}</span>`;
+
+        let updateActionButtonHtml = '<button class="btn btn-secondary" data-action="goto-download" style="width:100%;">前往下载</button>';
+        if (updateStatus === 'new_version') {
+            updateActionButtonHtml = '<button class="btn btn-primary" data-action="download-update" style="width:100%; animation: glow-pulse 2.5s infinite;">下载并更新</button>';
+        } else if (updateStatus === 'downloading') {
+            updateActionButtonHtml = '<button class="btn btn-secondary" data-action="cancel-update" style="width:100%;">取消下载</button>';
+        } else if (updateStatus === 'canceling') {
+            updateActionButtonHtml = '<button class="btn btn-secondary" style="width:100%;" disabled>正在取消...</button>';
+        }
 
         list.innerHTML = `
         <div class="general-settings-grid">
@@ -1343,7 +1358,7 @@ export function createSettingsControllerApi({
                                 <strong>${serverVersionText}</strong>
                             </div>
                             <div class="general-settings-update-actions" style="display:flex; flex-direction:column; gap:8px; width:100%;">
-                                <button class="btn btn-secondary" data-action="goto-download" style="width:100%; ${updateStatus === 'new_version' ? 'animation: glow-pulse 2.5s infinite;' : ''}">前往下载</button>
+                                ${updateActionButtonHtml}
                                 <button id="btn-check-update" class="btn btn-secondary" style="width:100%;">检查更新</button>
                             </div>
                         </div>
@@ -1362,6 +1377,8 @@ export function createSettingsControllerApi({
         const testBtn = documentRef.getElementById('btn-test-sound');
         const btnCheckUpdate = documentRef.getElementById('btn-check-update');
         const btnGotoDownloadList = Array.from(documentRef.querySelectorAll('[data-action="goto-download"]'));
+        const btnDownloadUpdateList = Array.from(documentRef.querySelectorAll('[data-action="download-update"]'));
+        const btnCancelUpdateList = Array.from(documentRef.querySelectorAll('[data-action="cancel-update"]'));
         const timeoutEnabledInput = documentRef.getElementById('setting-timeout-enabled');
         const timeoutSecondsInput = documentRef.getElementById('setting-timeout-seconds');
         const allowPrivateNetworkTargetsInput = documentRef.getElementById('setting-allow-private-network-targets');
@@ -1382,6 +1399,16 @@ export function createSettingsControllerApi({
         btnGotoDownloadList.forEach((button) => {
             button.addEventListener('click', () => {
                 windowRef.open(`https://github.com/${githubRepo}/releases/latest`, '_blank');
+            });
+        });
+        btnDownloadUpdateList.forEach((button) => {
+            button.addEventListener('click', () => {
+                downloadLatestUpdate();
+            });
+        });
+        btnCancelUpdateList.forEach((button) => {
+            button.addEventListener('click', () => {
+                cancelUpdateDownload();
             });
         });
 

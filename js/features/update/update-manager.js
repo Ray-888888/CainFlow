@@ -20,6 +20,13 @@ export function createUpdateManager({
 }) {
     let autoCheckCountdownTimer = null;
     let autoCheckCountdownToast = null;
+    let latestReleaseData = null;
+    let updateDownloadInProgress = false;
+    let updateDownloadPollTimer = null;
+    let activeUpdateJobId = '';
+    let handledTerminalUpdateJobId = '';
+    const updateDownloadTextKey = 'cainflow_update_download_text';
+    const activeDownloadStatuses = new Set(['starting', 'resolving', 'downloading', 'extracting', 'replacing', 'canceling']);
 
     function compareVersions(v1, v2) {
         const parse = (value) => {
@@ -42,6 +49,7 @@ export function createUpdateManager({
     }
 
     function showUpdateModal(releaseData) {
+        if (releaseData) latestReleaseData = releaseData;
         const modal = documentRef.getElementById('modal-update');
         const tag = documentRef.getElementById('update-tag');
         const date = documentRef.getElementById('update-date');
@@ -67,12 +75,19 @@ export function createUpdateManager({
 
         const btnDownload = documentRef.getElementById('btn-update-download');
         const btnBackup = documentRef.getElementById('btn-update-backup');
+        const btnCancel = documentRef.getElementById('btn-update-cancel');
 
         if (btnDownload) {
             btnDownload.onclick = () => {
-                windowRef.open(releaseData.html_url, '_blank');
+                downloadLatestUpdate(releaseData);
             };
         }
+        if (btnCancel) {
+            btnCancel.onclick = () => {
+                cancelUpdateDownload();
+            };
+        }
+        syncUpdateDownloadControls();
 
         if (btnBackup) {
             btnBackup.onclick = () => {
@@ -83,6 +98,7 @@ export function createUpdateManager({
     }
 
     function showUpdateCanvasNotice(releaseData) {
+        if (releaseData) latestReleaseData = releaseData;
         const settingsBtn = documentRef.getElementById('btn-settings');
 
         if (settingsBtn) settingsBtn.classList.add('has-update');
@@ -103,9 +119,9 @@ export function createUpdateManager({
                 },
                 {
                     id: 'btn-update-canvas-download',
-                    label: '下载',
+                    label: '下载更新',
                     onClick: () => {
-                        windowRef.open(releaseData.html_url || `https://github.com/${githubRepo}/releases/latest`, '_blank');
+                        downloadLatestUpdate(releaseData);
                     }
                 }
             ]
@@ -124,6 +140,356 @@ export function createUpdateManager({
 
     function clearUpdateError() {
         localStorageRef.removeItem('cainflow_update_error');
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+        if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+        if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB`;
+        if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+        return `${value} B`;
+    }
+
+    function formatSpeed(bytesPerSecond) {
+        return `${formatBytes(bytesPerSecond)}/s`;
+    }
+
+    function getDownloadSnapshotText(snapshot) {
+        if (!snapshot) return '';
+        const message = snapshot.message || '';
+        if (snapshot.status === 'downloading') {
+            const downloaded = formatBytes(snapshot.downloadedBytes || 0);
+            const total = snapshot.totalBytes ? formatBytes(snapshot.totalBytes) : '未知大小';
+            const speed = formatSpeed(snapshot.speedBytesPerSecond || 0);
+            const percent = Number.isFinite(snapshot.percent) ? `${snapshot.percent}%` : '';
+            return `正在下载更新：${percent ? `${percent}，` : ''}${downloaded} / ${total}，${speed}`;
+        }
+        if (snapshot.status === 'canceling') return message || '正在取消下载并清理临时文件...';
+        return message || '';
+    }
+
+    function setStoredDownloadText(message = '') {
+        if (message) localStorageRef.setItem(updateDownloadTextKey, message);
+        else localStorageRef.removeItem(updateDownloadTextKey);
+    }
+
+    function setUpdateDownloadStatus(message = '', type = 'info') {
+        const status = documentRef.getElementById('update-download-status');
+        if (!status) return;
+
+        if (!message) {
+            status.textContent = '';
+            status.className = 'update-download-status hidden';
+            return;
+        }
+
+        status.textContent = message;
+        status.className = `update-download-status ${type}`;
+    }
+
+    function syncUpdateDownloadControls() {
+        const buttons = Array.from(documentRef.querySelectorAll('#btn-update-download, [data-action="download-update"]'));
+        buttons.forEach((button) => {
+            button.disabled = updateDownloadInProgress;
+            button.textContent = updateDownloadInProgress ? '正在下载更新...' : '下载并更新';
+        });
+
+        const cancelButtons = Array.from(documentRef.querySelectorAll('#btn-update-cancel, [data-action="cancel-update"]'));
+        cancelButtons.forEach((button) => {
+            button.classList.toggle('hidden', !updateDownloadInProgress);
+            button.disabled = localStorageRef.getItem('cainflow_update_status') === 'canceling';
+            button.textContent = button.disabled ? '正在取消...' : '取消下载';
+        });
+    }
+
+    async function readUpdateDownloadError(response) {
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            if (data?.detail) return `${data.error || '下载更新失败'}：${data.detail}`;
+            if (data?.error) return data.error;
+        } catch {
+            // Ignore non-JSON error bodies.
+        }
+        return text || `下载更新失败：HTTP ${response.status}`;
+    }
+
+    function confirmUpdateDownload(releaseData = null) {
+        const tagName = releaseData?.tag_name || localStorageRef.getItem('cainflow_update_version') || '最新版';
+        const message = `即将从 GitHub 下载 ${tagName} 的 Release ZIP，并只覆盖 CainFlow 主程序。\n\n由于网络环境问题，下载速度可能不稳定；下载和替换期间请不要关闭 CainFlow。\n\n是否继续？`;
+        if (typeof windowRef.confirm === 'function') {
+            return windowRef.confirm(message);
+        }
+        return true;
+    }
+
+    async function downloadLatestUpdate(releaseData = null) {
+        if (releaseData) latestReleaseData = releaseData;
+        const activeRelease = releaseData || latestReleaseData;
+
+        if (updateDownloadInProgress) {
+            showToast('更新正在下载中，请稍候...', 'info', 4000);
+            return;
+        }
+
+        if (!confirmUpdateDownload(activeRelease)) return;
+
+        updateDownloadInProgress = true;
+        activeUpdateJobId = '';
+        handledTerminalUpdateJobId = '';
+        localStorageRef.setItem('cainflow_update_status', 'downloading');
+        clearUpdateError();
+        setStoredDownloadText('正在连接 GitHub，下载速度会在开始传输后显示...');
+        setUpdateDownloadStatus('正在连接 GitHub，下载速度会在开始传输后显示...', 'info');
+        syncUpdateDownloadControls();
+        renderGeneralSettings();
+        showToast('正在从 GitHub 下载更新，网络环境不同速度可能不稳定...', 'info', 8000);
+
+        try {
+            const response = await fetchImpl('/api/update/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    repo: githubRepo,
+                    tagName: activeRelease?.tag_name || ''
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(await readUpdateDownloadError(response));
+            }
+
+            const snapshot = await response.json();
+            if (snapshot?.id) activeUpdateJobId = snapshot.id;
+            applyUpdateDownloadSnapshot(snapshot);
+            scheduleUpdateDownloadPoll();
+        } catch (error) {
+            const message = error?.message || '下载更新失败，请稍后重试';
+            updateDownloadInProgress = false;
+            setUpdateError(message);
+            setStoredDownloadText('');
+            setUpdateDownloadStatus(message, 'error');
+            showToast(message, 'error', 9000);
+            renderGeneralSettings();
+            syncUpdateDownloadControls();
+        }
+    }
+
+    async function cancelUpdateDownload() {
+        if (!updateDownloadInProgress) {
+            showToast('当前没有正在下载的更新', 'info', 3000);
+            return;
+        }
+
+        localStorageRef.setItem('cainflow_update_status', 'canceling');
+        setStoredDownloadText('正在取消下载并清理临时文件...');
+        setUpdateDownloadStatus('正在取消下载并清理临时文件...', 'info');
+        renderGeneralSettings();
+        syncUpdateDownloadControls();
+
+        try {
+            const response = await fetchImpl('/api/update/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jobId: activeUpdateJobId })
+            });
+            const snapshot = await response.json();
+            if (!response.ok) throw new Error(snapshot?.error || '取消更新下载失败');
+            applyUpdateDownloadSnapshot(snapshot);
+            scheduleUpdateDownloadPoll(400);
+        } catch (error) {
+            const message = error?.message || '取消更新下载失败';
+            showToast(message, 'error', 6000);
+            setUpdateDownloadStatus(message, 'error');
+        }
+    }
+
+    function sendCancelUpdateDownloadOnPageLeave() {
+        if (!updateDownloadInProgress) return false;
+
+        const payload = JSON.stringify({
+            jobId: activeUpdateJobId,
+            reason: 'page_leave'
+        });
+
+        try {
+            const navigatorRef = windowRef.navigator;
+            if (navigatorRef?.sendBeacon) {
+                const body = typeof windowRef.Blob === 'function'
+                    ? new windowRef.Blob([payload], { type: 'application/json' })
+                    : payload;
+                if (navigatorRef.sendBeacon('/api/update/cancel', body)) {
+                    return true;
+                }
+            }
+        } catch {
+            // Fall through to keepalive fetch.
+        }
+
+        try {
+            fetchImpl('/api/update/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function handleUpdateBeforeUnload(event) {
+        if (!updateDownloadInProgress) return undefined;
+        event.preventDefault();
+        event.returnValue = '';
+        return '';
+    }
+
+    function handleUpdatePageHide() {
+        if (!updateDownloadInProgress) return;
+        localStorageRef.setItem('cainflow_update_status', 'canceling');
+        setStoredDownloadText('页面已关闭，正在取消下载并清理临时文件...');
+        sendCancelUpdateDownloadOnPageLeave();
+        clearUpdateDownloadPollTimer();
+    }
+
+    function initUpdateDownloadWindowGuards() {
+        if (!windowRef?.addEventListener) return;
+        windowRef.addEventListener('beforeunload', handleUpdateBeforeUnload);
+        windowRef.addEventListener('pagehide', handleUpdatePageHide);
+    }
+
+    async function syncExistingUpdateDownloadJob() {
+        const storedStatus = localStorageRef.getItem('cainflow_update_status') || '';
+        if (storedStatus !== 'downloading' && storedStatus !== 'canceling') return;
+
+        try {
+            const response = await fetchImpl('/api/update/status');
+            const snapshot = await response.json();
+            if (!response.ok) throw new Error(snapshot?.error || '读取更新下载状态失败');
+
+            if (snapshot?.id) activeUpdateJobId = snapshot.id;
+            applyUpdateDownloadSnapshot(snapshot);
+            if (activeDownloadStatuses.has(snapshot?.status)) {
+                scheduleUpdateDownloadPoll();
+            }
+        } catch {
+            updateDownloadInProgress = false;
+            activeUpdateJobId = '';
+            setStoredDownloadText('');
+            const latestVersion = localStorageRef.getItem('cainflow_update_version');
+            localStorageRef.setItem('cainflow_update_status', latestVersion ? 'new_version' : 'unknown');
+            renderGeneralSettings();
+            syncUpdateDownloadControls();
+        }
+    }
+
+    function clearUpdateDownloadPollTimer() {
+        if (updateDownloadPollTimer !== null) {
+            clearTimeoutImpl(updateDownloadPollTimer);
+            updateDownloadPollTimer = null;
+        }
+    }
+
+    function scheduleUpdateDownloadPoll(delayMs = 800) {
+        clearUpdateDownloadPollTimer();
+        if (!updateDownloadInProgress || !activeUpdateJobId) return;
+        updateDownloadPollTimer = setTimeoutImpl(pollUpdateDownloadStatus, delayMs);
+    }
+
+    async function pollUpdateDownloadStatus() {
+        if (!activeUpdateJobId) return;
+        try {
+            const response = await fetchImpl(`/api/update/status?jobId=${encodeURIComponent(activeUpdateJobId)}`);
+            const snapshot = await response.json();
+            if (!response.ok) throw new Error(snapshot?.error || '读取更新下载状态失败');
+            applyUpdateDownloadSnapshot(snapshot);
+            scheduleUpdateDownloadPoll();
+        } catch (error) {
+            const message = error?.message || '读取更新下载状态失败';
+            updateDownloadInProgress = false;
+            setUpdateError(message);
+            setStoredDownloadText('');
+            setUpdateDownloadStatus(message, 'error');
+            showToast(message, 'error', 7000);
+            renderGeneralSettings();
+            syncUpdateDownloadControls();
+        }
+    }
+
+    function applyUpdateDownloadSnapshot(snapshot = {}) {
+        const status = snapshot.status || 'idle';
+        const jobId = snapshot.id || activeUpdateJobId || '';
+        if (jobId) activeUpdateJobId = jobId;
+
+        if (activeDownloadStatuses.has(status)) {
+            updateDownloadInProgress = true;
+            localStorageRef.setItem('cainflow_update_status', status === 'canceling' ? 'canceling' : 'downloading');
+            const text = getDownloadSnapshotText(snapshot) || '正在下载更新...';
+            setStoredDownloadText(text);
+            setUpdateDownloadStatus(text, 'info');
+            renderGeneralSettings();
+            syncUpdateDownloadControls();
+            return;
+        }
+
+        updateDownloadInProgress = false;
+        clearUpdateDownloadPollTimer();
+        syncUpdateDownloadControls();
+
+        if (status === 'completed') {
+            const result = snapshot.result || {};
+            const successMessage = snapshot.message || result.message || '更新已完成，请重启 CainFlow 主程序。';
+            if (result.tagName) localStorageRef.setItem('cainflow_update_version', result.tagName);
+            localStorageRef.setItem('cainflow_update_status', 'downloaded');
+            clearUpdateError();
+            setStoredDownloadText('');
+            setUpdateDownloadStatus(successMessage, 'success');
+            renderGeneralSettings();
+            if (handledTerminalUpdateJobId !== jobId) {
+                handledTerminalUpdateJobId = jobId;
+                showToast(successMessage, 'success', 12000);
+                if (typeof windowRef.alert === 'function') {
+                    windowRef.alert(`${successMessage}\n\n请重启 CainFlow 主程序。`);
+                }
+            }
+            return;
+        }
+
+        if (status === 'canceled') {
+            const message = snapshot.message || '下载已取消，未完成的临时文件已删除。';
+            const latestVersion = localStorageRef.getItem('cainflow_update_version');
+            localStorageRef.setItem('cainflow_update_status', latestVersion ? 'new_version' : 'unknown');
+            setStoredDownloadText('');
+            setUpdateDownloadStatus(message, 'info');
+            renderGeneralSettings();
+            if (handledTerminalUpdateJobId !== jobId) {
+                handledTerminalUpdateJobId = jobId;
+                showToast(message, 'info', 6000);
+            }
+            return;
+        }
+
+        if (status === 'error') {
+            const message = snapshot.message || snapshot.error || '下载更新失败，请稍后重试';
+            setUpdateError(message);
+            setStoredDownloadText('');
+            setUpdateDownloadStatus(message, 'error');
+            renderGeneralSettings();
+            if (handledTerminalUpdateJobId !== jobId) {
+                handledTerminalUpdateJobId = jobId;
+                showToast(message, 'error', 9000);
+            }
+            return;
+        }
+
+        setStoredDownloadText('');
+        if (localStorageRef.getItem('cainflow_update_status') === 'downloading' || localStorageRef.getItem('cainflow_update_status') === 'canceling') {
+            const latestVersion = localStorageRef.getItem('cainflow_update_version');
+            localStorageRef.setItem('cainflow_update_status', latestVersion ? 'new_version' : 'unknown');
+        }
+        renderGeneralSettings();
     }
 
     function getUpdateFailureMessage(error, response = null) {
@@ -274,6 +640,7 @@ export function createUpdateManager({
             }
 
             const data = await response.json();
+            latestReleaseData = data;
             const latestVersion = data.tag_name;
             localStorageRef.setItem('cainflow_update_version', latestVersion || '');
             const comparison = compareVersions(latestVersion, appVersion);
@@ -310,8 +677,13 @@ export function createUpdateManager({
         checkRefreshNotice();
     }
 
+    initUpdateDownloadWindowGuards();
+    setTimeoutImpl(syncExistingUpdateDownloadJob, 0);
+
     return {
         checkUpdate,
+        downloadLatestUpdate,
+        cancelUpdateDownload,
         scheduleAutoUpdateCheck,
         checkRefreshNotice,
         initRefreshNotice

@@ -39,6 +39,7 @@ export function createHistoryFullscreenApi({
         cardEventsBound: false,
         renderFrame: 0,
         renderedRangeKey: '',
+        renderedRows: new Map(),
         thumbQueue: [],
         queuedThumbIds: new Set(),
         hydratingThumbs: false,
@@ -78,6 +79,7 @@ export function createHistoryFullscreenApi({
         if (list) {
             list.classList.remove('history-fullscreen-list-virtual');
             list.style.height = '';
+            viewState.renderedRows.clear();
             list.innerHTML = '<div class="history-fullscreen-empty">暂无历史记录</div>';
         }
         if (timeline) timeline.innerHTML = '';
@@ -185,6 +187,18 @@ export function createHistoryFullscreenApi({
         `;
     }
 
+    function clearRenderedRows(list) {
+        viewState.renderedRows.clear();
+        viewState.renderedRangeKey = '';
+        if (list) list.replaceChildren();
+    }
+
+    function createVirtualRowElement(row) {
+        const template = documentRef.createElement('template');
+        template.innerHTML = renderVirtualRow(row).trim();
+        return template.content.firstElementChild;
+    }
+
     function getVisibleRows(scrollTop, viewportHeight) {
         const start = Math.max(0, scrollTop - VIRTUAL_OVERSCAN);
         const end = scrollTop + viewportHeight + VIRTUAL_OVERSCAN;
@@ -207,7 +221,31 @@ export function createHistoryFullscreenApi({
 
         list.classList.add('history-fullscreen-list-virtual');
         list.style.height = `${viewState.layout.totalHeight}px`;
-        list.innerHTML = visibleRows.map(renderVirtualRow).join('');
+
+        if (force) {
+            clearRenderedRows(list);
+        }
+
+        const visibleIds = new Set(visibleRows.map((row) => row.id));
+        viewState.renderedRows.forEach((rowEl, rowId) => {
+            if (!visibleIds.has(rowId)) {
+                rowEl.remove();
+                viewState.renderedRows.delete(rowId);
+            }
+        });
+
+        visibleRows.forEach((row) => {
+            let rowEl = viewState.renderedRows.get(row.id);
+            if (!rowEl) {
+                rowEl = createVirtualRowElement(row);
+                if (!rowEl) return;
+                viewState.renderedRows.set(row.id, rowEl);
+                list.appendChild(rowEl);
+                return;
+            }
+            if (rowEl.parentNode !== list) list.appendChild(rowEl);
+        });
+
         viewState.renderedRangeKey = rangeKey;
         queueVisibleThumbHydration(visibleRows);
     }
@@ -405,7 +443,7 @@ export function createHistoryFullscreenApi({
         batchToolbar?.classList.add('hidden');
         viewState.renderedRangeKey = '';
         if (list) {
-            list.innerHTML = '';
+            clearRenderedRows(list);
             list.style.height = '';
         }
     }

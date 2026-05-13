@@ -6,6 +6,8 @@ from datetime import datetime
 HOST = '0.0.0.0'
 LOCAL_HOST = '127.0.0.1'
 PORT = 8767
+GITHUB_REPO = 'RingoCaviar/CainFlow'
+UPDATE_MAIN_EXE_NAME = 'CainFlow.exe'
 PROXY_STREAM_CHUNK_SIZE = 64 * 1024
 LOG_FILE_PREFIX = 'backend'
 LOG_BODY_PREVIEW_BYTES = 4096
@@ -28,6 +30,7 @@ def get_exe_dir():
 
 STATIC_ROOT = get_resource_path()
 EXE_DIR = get_exe_dir()
+MAIN_EXE_PATH = sys.executable if hasattr(sys, 'frozen') else os.path.join(EXE_DIR, UPDATE_MAIN_EXE_NAME)
 WORKFLOWS_DIR = os.path.join(EXE_DIR, 'workflows')
 LOG_DIR = os.path.join(EXE_DIR, 'log')
 ALLOWED_HOSTS_FILE = os.path.join(EXE_DIR, 'allowed_hosts.json')

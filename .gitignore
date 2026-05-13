@@ -4,3 +4,10 @@ __pycache__/
 
 # Runtime logs
 log/
+
+# Local release builds
+build/
+dist/
+release_staging/
+CainFlow_Launcher.spec
+Cainflow_*.zip

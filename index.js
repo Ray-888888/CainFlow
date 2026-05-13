@@ -973,6 +973,8 @@ settingsControllerApi = createSettingsControllerApi({
     saveState,
     addLog,
     checkUpdate: (isManual) => updateManager.checkUpdate(isManual),
+    downloadLatestUpdate: () => updateManager.downloadLatestUpdate(),
+    cancelUpdateDownload: () => updateManager.cancelUpdateDownload(),
     updateAllConnections,
     applyGlobalAnimationSetting,
     fitNodeToContent
