@@ -19,6 +19,7 @@ from backend.services.log_service import (
     set_response_data,
 )
 from backend.services.security_service import is_safe_url
+from backend.services.version_service import get_app_user_agent
 
 
 def _is_client_disconnect_error(error):
@@ -103,7 +104,7 @@ def handle_proxy_request(handler):
 
     req_headers['Connection'] = 'close'
     if 'user-agent' not in [header.lower() for header in req_headers.keys()]:
-        req_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.8.2'
+        req_headers['User-Agent'] = get_app_user_agent()
 
     context = ssl.create_default_context()
     context.check_hostname = False

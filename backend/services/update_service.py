@@ -14,6 +14,7 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from backend import config, state
+from backend.services.version_service import get_app_user_agent
 
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
@@ -74,7 +75,7 @@ def _open_github_url(url, timeout):
         url,
         headers={
             'Accept': 'application/vnd.github+json, application/octet-stream',
-            'User-Agent': f'CainFlow/{config.UPDATE_MAIN_EXE_NAME}',
+            'User-Agent': get_app_user_agent(),
             'Connection': 'close',
         },
         method='GET',

@@ -6,6 +6,7 @@ from backend import state
 from backend.services.http_helpers import read_json_body, write_bytes, write_error, write_json, write_text
 from backend.services.security_service import check_proxy_health, detect_available_proxy, save_allowed_hosts
 from backend.services.security_service import is_safe_url
+from backend.services.version_service import get_app_user_agent
 
 
 def _get_provider_models(handler):
@@ -25,7 +26,7 @@ def _get_provider_models(handler):
 
     headers = {
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CainFlow/2.8.2',
+        'User-Agent': get_app_user_agent(),
         'Connection': 'close',
     }
     if protocol == 'openai' and apikey:
