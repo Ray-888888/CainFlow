@@ -362,6 +362,19 @@ html[data-app-theme="light"] .node-run-cancel-btn.is-canceling {
     color: #ffffff;
 }
 
+html[data-app-theme="light"] .node-clone-badge {
+    background: rgba(236, 254, 255, 0.98);
+    border-color: rgba(8, 145, 178, 0.3);
+    color: #0f766e;
+    box-shadow: 0 calc(8px / var(--canvas-zoom, 1)) calc(18px / var(--canvas-zoom, 1)) rgba(8, 145, 178, 0.14);
+}
+
+html[data-app-theme="light"] .node-clone-badge:hover,
+html[data-app-theme="light"] .node-clone-badge:focus-visible {
+    background: rgba(207, 250, 254, 1);
+    border-color: rgba(8, 145, 178, 0.48);
+}
+
 html[data-app-theme="light"] .node-header,
 html[data-app-theme="light"] .drawer-subheader,
 html[data-app-theme="light"] .help-panel-header,

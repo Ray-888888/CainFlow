@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import os
+import socket
 import ssl
 import time
 import urllib.error
@@ -20,6 +21,16 @@ BLOCKED_HOSTNAMES = {
     'localhost',
     'localhost.localdomain',
 }
+
+COMMON_PROXY_CANDIDATES = [
+    {'ip': '127.0.0.1', 'port': '7890', 'name': 'Clash / Mihomo HTTP'},
+    {'ip': '127.0.0.1', 'port': '7897', 'name': 'Clash Verge / Mihomo mixed'},
+    {'ip': '127.0.0.1', 'port': '7891', 'name': 'Clash controller proxy'},
+    {'ip': '127.0.0.1', 'port': '10809', 'name': 'v2rayN / Xray HTTP'},
+    {'ip': '127.0.0.1', 'port': '20171', 'name': 'Hiddify / local proxy'},
+    {'ip': '127.0.0.1', 'port': '20172', 'name': 'Hiddify / local proxy alt'},
+    {'ip': '127.0.0.1', 'port': '8080', 'name': 'Generic HTTP proxy'},
+]
 
 
 def _normalize_hostname(value):
@@ -89,7 +100,23 @@ def save_allowed_hosts(hosts=None):
         print(f'Error: Failed to save {config.ALLOWED_HOSTS_FILE}: {exc}')
 
 
-def check_proxy_health(ip, port):
+def _can_open_proxy_socket(ip, port, timeout):
+    try:
+        port_number = int(str(port).strip())
+    except (TypeError, ValueError):
+        return False
+    if port_number <= 0 or port_number > 65535:
+        return False
+    try:
+        with socket.create_connection((str(ip).strip() or '127.0.0.1', port_number), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def check_proxy_health(ip, port, request_timeout=5.0, connect_timeout=0.8):
+    if not _can_open_proxy_socket(ip, port, connect_timeout):
+        return False, 'Proxy port is not reachable'
     proxy_url = f'http://{ip}:{port}'
     proxy_handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
     context = ssl.create_default_context()
@@ -99,13 +126,32 @@ def check_proxy_health(ip, port):
     try:
         start = time.perf_counter()
         request = urllib.request.Request('https://www.google.com', method='HEAD')
-        opener.open(request, timeout=5.0)
+        opener.open(request, timeout=request_timeout)
         latency = int((time.perf_counter() - start) * 1000)
         return True, latency
     except urllib.error.HTTPError:
         return True, 'HTTP Error'
     except Exception as exc:
         return False, str(exc)
+
+
+def detect_available_proxy():
+    for candidate in COMMON_PROXY_CANDIDATES:
+        success, result = check_proxy_health(
+            candidate.get('ip', '127.0.0.1'),
+            candidate.get('port', ''),
+            request_timeout=3.0,
+            connect_timeout=0.35,
+        )
+        if success:
+            latency = result if isinstance(result, int) else 0
+            return {
+                'ip': str(candidate.get('ip') or '127.0.0.1'),
+                'port': str(candidate.get('port') or ''),
+                'name': str(candidate.get('name') or 'Local proxy'),
+                'latency': latency,
+            }
+    return None
 
 
 def is_safe_url(url, allow_private_network_targets=False):

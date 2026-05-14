@@ -4,7 +4,7 @@ import urllib.request
 
 from backend import state
 from backend.services.http_helpers import read_json_body, write_bytes, write_error, write_json, write_text
-from backend.services.security_service import check_proxy_health, save_allowed_hosts
+from backend.services.security_service import check_proxy_health, detect_available_proxy, save_allowed_hosts
 from backend.services.security_service import is_safe_url
 
 
@@ -117,6 +117,26 @@ def handle_post(handler):
             write_json(handler, {'success': True, 'latency': result if isinstance(result, int) else 0})
         else:
             write_error(handler, 500, 'Cannot connect via proxy', result)
+        return True
+
+    if handler.path == '/api/detect_proxy':
+        detected = detect_available_proxy()
+        if detected:
+            write_json(handler, {
+                'success': True,
+                'proxy': {
+                    'enabled': True,
+                    'ip': detected.get('ip', '127.0.0.1'),
+                    'port': detected.get('port', ''),
+                },
+                'latency': detected.get('latency', 0),
+                'source': detected.get('name', 'Local proxy'),
+            })
+        else:
+            write_json(handler, {
+                'success': False,
+                'message': '未检测到常见本地代理端口，请确认代理软件已启动，或手动填写代理地址与端口。'
+            })
         return True
 
     if handler.path == '/api/proxy':

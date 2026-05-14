@@ -385,6 +385,7 @@ export function createSettingsControllerApi({
         const enabledCheck = documentRef.getElementById('proxy-enabled');
         const ipInput = documentRef.getElementById('proxy-ip');
         const portInput = documentRef.getElementById('proxy-port');
+        const detectBtn = documentRef.getElementById('btn-detect-proxy');
         const saveBtn = documentRef.getElementById('btn-test-proxy');
         const fieldsDiv = documentRef.getElementById('proxy-settings-fields');
 
@@ -396,11 +397,13 @@ export function createSettingsControllerApi({
             const newCheck = enabledCheck.cloneNode(true);
             const newIp = ipInput.cloneNode(true);
             const newPort = portInput.cloneNode(true);
+            const newDetectBtn = detectBtn.cloneNode(true);
             const newTestBtn = saveBtn.cloneNode(true);
 
             enabledCheck.parentNode.replaceChild(newCheck, enabledCheck);
             ipInput.parentNode.replaceChild(newIp, ipInput);
             portInput.parentNode.replaceChild(newPort, portInput);
+            detectBtn.parentNode.replaceChild(newDetectBtn, detectBtn);
             saveBtn.parentNode.replaceChild(newTestBtn, saveBtn);
 
             newCheck.checked = config.enabled;
@@ -441,6 +444,40 @@ export function createSettingsControllerApi({
                     showToast('保存代理设置异常: ' + e, 'error');
                 }
             };
+
+            newDetectBtn.addEventListener('click', async () => {
+                newDetectBtn.disabled = true;
+                newTestBtn.disabled = true;
+                const originalText = newDetectBtn.textContent;
+                newDetectBtn.textContent = '检测中...';
+
+                try {
+                    const response = await fetchImpl('/api/detect_proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}'
+                    });
+                    const data = await response.json();
+                    if (response.ok && data?.success && data?.proxy) {
+                        newCheck.checked = true;
+                        newIp.value = String(data.proxy.ip || '127.0.0.1');
+                        newPort.value = String(data.proxy.port || '');
+                        updateFields();
+                        await handleSave();
+                        const sourceText = data.source ? ` (${data.source})` : '';
+                        const latencyText = Number.isFinite(data.latency) && data.latency > 0 ? `，延迟 ${data.latency}ms` : '';
+                        showToast(`已检测到可用代理${sourceText}，已自动填入 ${newIp.value}:${newPort.value}${latencyText}`, 'success');
+                    } else {
+                        showToast(data?.message || '未检测到可用的本地代理端口', 'warning');
+                    }
+                } catch (e) {
+                    showToast('自动检测代理失败: ' + e, 'error');
+                } finally {
+                    newDetectBtn.textContent = originalText;
+                    newDetectBtn.disabled = false;
+                    updateFields();
+                }
+            });
 
             newTestBtn.addEventListener('click', async () => {
                 newTestBtn.disabled = true;

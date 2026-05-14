@@ -20,9 +20,9 @@ export function createStartupControllerApi({
         try {
             initUI();
             const restored = await loadState();
+            await syncProxyToServer();
             if (restored) {
                 showToast('已从本地存储恢复工作状态', 'success');
-                syncProxyToServer();
             } else if (state.nodes.size === 0) {
                 const defaultData = await loadDefaultWorkflow();
                 if (defaultData) {

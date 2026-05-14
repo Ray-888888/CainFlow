@@ -146,7 +146,16 @@ function renderNodeHeader(id, config, options = {}) {
     const collapseStateClass = options.collapsed ? 'is-collapsed' : '';
     const displayTitle = options.customTitle || config.title;
     const cloneBadge = options.isClone
-        ? `<button type="button" class="node-clone-badge" data-node-id="${id}" title="跳转到源节点" aria-label="跳转到源节点">克隆</button>`
+        ? `
+        <button type="button" class="node-clone-badge" data-node-id="${id}" title="跳转到源节点" aria-label="跳转到源节点">
+            <span class="node-clone-badge__icon" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+                    <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </span>
+            <span class="node-clone-badge__label">克隆</span>
+        </button>`
         : '';
     return `
         <div class="node-glass-bg"></div>
