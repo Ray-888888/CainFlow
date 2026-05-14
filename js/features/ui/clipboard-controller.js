@@ -45,6 +45,15 @@ export function createClipboardControllerApi({
         if (node.type === 'ImageImport' || node.type === 'ImagePreview' || node.type === 'ImageSave' || node.type === 'ImageResize' || node.type === 'ImageCompare') {
             serialized.imageData = node.data.image || node.imageData || null;
         }
+        if (node.type === 'ImagePreview' || node.type === 'ImageSave') {
+            const images = Array.isArray(node.data?.images)
+                ? node.data.images.filter((item) => typeof item === 'string' && item.trim())
+                : [];
+            if (images.length > 1) {
+                serialized.images = images.slice();
+                serialized.imagePreviewIndex = Math.max(0, parseInt(node.imagePreviewIndex || '0', 10) || 0);
+            }
+        }
         if (node.type === 'ImageImport') {
             serialized.importMode = documentRef.getElementById(`${id}-import-mode`)?.value || node.importMode || 'upload';
             serialized.imageUrl = documentRef.getElementById(`${id}-url-input`)?.value || node.imageUrl || '';

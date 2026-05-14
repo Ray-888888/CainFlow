@@ -754,6 +754,23 @@ export function createNodeLifecycleApi({
                 nodeData.textPreviewIndex = 0;
             }
         }
+        if (normalizedType === 'ImagePreview' || normalizedType === 'ImageSave') {
+            const restoredImages = Array.isArray(effectiveRestoreData?.images)
+                ? effectiveRestoreData.images.filter((item) => typeof item === 'string' && item.trim())
+                : [];
+            if (restoredImages.length > 1) {
+                nodeData.data.images = restoredImages.slice();
+                nodeData.imageDataList = restoredImages.slice();
+                nodeData.imagePreviewIndex = Math.max(0, Math.min(
+                    restoredImages.length - 1,
+                    parseInt(effectiveRestoreData?.imagePreviewIndex || '0', 10) || 0
+                ));
+                nodeData.data.image = restoredImages[nodeData.imagePreviewIndex] || restoredImages[0];
+                nodeData.imageData = nodeData.data.image;
+            } else {
+                nodeData.imagePreviewIndex = 0;
+            }
+        }
         if (normalizedType === 'CameraControl') {
             nodeData.data.pitch = Number.isFinite(Number(effectiveRestoreData?.pitch)) ? Number(effectiveRestoreData.pitch) : 12;
             nodeData.data.yaw = Number.isFinite(Number(effectiveRestoreData?.yaw)) ? Number(effectiveRestoreData.yaw) : 28;
@@ -829,8 +846,10 @@ export function createNodeLifecycleApi({
                 }
 
                 if (data) {
-                    nodeData.imageData = data;
-                    nodeData.data.image = data;
+                    if (!(normalizedType === 'ImagePreview' || normalizedType === 'ImageSave') || !Array.isArray(nodeData.imageDataList) || nodeData.imageDataList.length <= 1) {
+                        nodeData.imageData = data;
+                        nodeData.data.image = data;
+                    }
 
                     if (hasInitialData && !isRemoteImageUrl(data)) {
                         await saveImageAsset(id, data);
@@ -847,7 +866,23 @@ export function createNodeLifecycleApi({
                     } else if (normalizedType === 'ImagePreview' || normalizedType === 'ImageGenerate') {
                         const previewContainer = el.querySelector(`#${id}-preview`);
                         if (previewContainer) {
-                            previewContainer.innerHTML = `<img src="${data}" alt="预览" draggable="false" style="pointer-events: none;" />`;
+                            if (normalizedType === 'ImagePreview' && Array.isArray(nodeData.imageDataList) && nodeData.imageDataList.length > 1) {
+                                const index = Math.max(0, Math.min(nodeData.imageDataList.length - 1, Number.isFinite(nodeData.imagePreviewIndex) ? nodeData.imagePreviewIndex : 0));
+                                const currentImage = nodeData.imageDataList[index];
+                                previewContainer.classList.add('has-multiple-images');
+                                previewContainer.innerHTML = `
+                                    <img src="${currentImage}" alt="预览 ${index + 1}/${nodeData.imageDataList.length}" draggable="false" style="pointer-events: none;" />
+                                    <button type="button" class="image-save-preview-nav image-save-preview-prev" data-direction="-1" title="上一张" aria-label="上一张">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <button type="button" class="image-save-preview-nav image-save-preview-next" data-direction="1" title="下一张" aria-label="下一张">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </button>
+                                    <div class="image-save-preview-counter">${index + 1}/${nodeData.imageDataList.length}</div>
+                                `;
+                            } else {
+                                previewContainer.innerHTML = `<img src="${data}" alt="预览" draggable="false" style="pointer-events: none;" />`;
+                            }
                         }
                         const controls = el.querySelector(`#${id}-controls`);
                         if (controls) controls.style.display = 'flex';
@@ -856,7 +891,23 @@ export function createNodeLifecycleApi({
                     } else if (normalizedType === 'ImageSave') {
                         const savePreview = el.querySelector(`#${id}-save-preview`);
                         if (savePreview) {
-                            savePreview.innerHTML = `<img src="${data}" alt="待保存" draggable="false" style="pointer-events: none;" />`;
+                            if (Array.isArray(nodeData.imageDataList) && nodeData.imageDataList.length > 1) {
+                                const index = Math.max(0, Math.min(nodeData.imageDataList.length - 1, Number.isFinite(nodeData.imagePreviewIndex) ? nodeData.imagePreviewIndex : 0));
+                                const currentImage = nodeData.imageDataList[index];
+                                savePreview.classList.add('has-multiple-images');
+                                savePreview.innerHTML = `
+                                    <img src="${currentImage}" alt="待保存 ${index + 1}/${nodeData.imageDataList.length}" draggable="false" style="pointer-events: none;" />
+                                    <button type="button" class="image-save-preview-nav image-save-preview-prev" data-direction="-1" title="上一张" aria-label="上一张">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <button type="button" class="image-save-preview-nav image-save-preview-next" data-direction="1" title="下一张" aria-label="下一张">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </button>
+                                    <div class="image-save-preview-counter">${index + 1}/${nodeData.imageDataList.length}</div>
+                                `;
+                            } else {
+                                savePreview.innerHTML = `<img src="${data}" alt="待保存" draggable="false" style="pointer-events: none;" />`;
+                            }
                         }
                         const manualSaveBtn = el.querySelector(`#${id}-manual-save`);
                         const viewFullBtn = el.querySelector(`#${id}-view-full`);

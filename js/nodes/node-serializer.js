@@ -42,6 +42,15 @@ export function createNodeSerializer({ state, documentRef }) {
             if (includeImages && node.imageData) {
                 serialized.imageData = node.imageData;
             }
+            if (includeImages && (node.type === 'ImagePreview' || node.type === 'ImageSave')) {
+                const images = Array.isArray(node.data?.images)
+                    ? node.data.images.filter((item) => typeof item === 'string' && item.trim())
+                    : [];
+                if (images.length > 1) {
+                    serialized.images = images.slice();
+                    serialized.imagePreviewIndex = Math.max(0, parseInt(node.imagePreviewIndex || '0', 10) || 0);
+                }
+            }
 
             if (node.type === 'ImageImport') {
                 serialized.importMode = documentRef.getElementById(`${id}-import-mode`)?.value || node.importMode || 'upload';

@@ -425,16 +425,49 @@ function renderTextChatBody(id, restoreData, models, providers) {
     `;
 }
 
-function renderImagePreviewBody(id) {
+function normalizeRestoreImageList(value) {
+    if (Array.isArray(value)) {
+        return value.filter((item) => typeof item === 'string' && item.trim());
+    }
+    return typeof value === 'string' && value.trim() ? [value] : [];
+}
+
+function renderRestoredMultiImagePreview(imageList, previewIndex, altPrefix, placeholderClass, placeholderText) {
+    if (imageList.length === 0) {
+        return `<div class="${placeholderClass}">${placeholderText}</div>`;
+    }
+    const index = Math.max(0, Math.min(imageList.length - 1, previewIndex));
+    const image = imageList[index];
     return `
-        <div class="preview-container" id="${id}-preview">
-            <div class="preview-placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                运行后预览图片
-            </div>
+        <img src="${image}" alt="${altPrefix} ${index + 1}/${imageList.length}" draggable="false" />
+        ${imageList.length > 1 ? `
+            <button type="button" class="image-save-preview-nav image-save-preview-prev" data-direction="-1" title="上一张" aria-label="上一张">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button type="button" class="image-save-preview-nav image-save-preview-next" data-direction="1" title="下一张" aria-label="下一张">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="image-save-preview-counter">${index + 1}/${imageList.length}</div>
+        ` : ''}
+    `;
+}
+
+function renderImagePreviewBody(id, restoreData) {
+    const rd = restoreData || {};
+    const imageList = normalizeRestoreImageList(rd.images || rd.imageData);
+    const previewIndex = Math.max(0, parseInt(rd.imagePreviewIndex || '0', 10) || 0);
+    const hasMultipleImages = imageList.length > 1;
+    return `
+        <div class="preview-container ${hasMultipleImages ? 'has-multiple-images' : ''}" id="${id}-preview">
+            ${imageList.length > 0
+                ? renderRestoredMultiImagePreview(imageList, previewIndex, '预览', 'preview-placeholder', '运行后预览图片')
+                : `<div class="preview-placeholder">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    运行后预览图片
+                </div>`}
         </div>
         <div class="image-resolution-badge" id="${id}-res" style="display:none"></div>
-        <div class="preview-controls" id="${id}-controls" style="display:none">
+        <div class="preview-controls" id="${id}-controls" style="display:${imageList.length > 0 ? 'flex' : 'none'}">
             <button class="preview-ctrl-btn" id="${id}-zoom-in" title="放大"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
             <button class="preview-ctrl-btn" id="${id}-zoom-out" title="缩小"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
             <button class="preview-ctrl-btn" id="${id}-zoom-reset" title="重置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
@@ -609,23 +642,28 @@ function renderTextSplitBody(id, restoreData) {
 function renderImageSaveBody(id, restoreData, hasGlobalSaveDirHandle) {
     const rd = restoreData || {};
     const showWarning = !hasGlobalSaveDirHandle;
+    const imageList = normalizeRestoreImageList(rd.images || rd.imageData);
+    const previewIndex = Math.max(0, parseInt(rd.imagePreviewIndex || '0', 10) || 0);
+    const hasMultipleImages = imageList.length > 1;
 
     return `
         <div class="save-no-path-warning" id="${id}-path-warning" style="color:#ef4444; font-size:11px; margin-bottom:10px; display:${showWarning ? 'block' : 'none'}; font-weight:500;">
             ⚠️ 未设置全局保存目录，图片无法自动落盘
         </div>
-        <div class="save-preview-container" id="${id}-save-preview">
-            <div class="save-preview-placeholder">运行后显示图片</div>
+        <div class="save-preview-container ${hasMultipleImages ? 'has-multiple-images' : ''}" id="${id}-save-preview">
+            ${imageList.length > 0
+                ? renderRestoredMultiImagePreview(imageList, previewIndex, '待保存', 'save-preview-placeholder', '运行后显示图片')
+                : '<div class="save-preview-placeholder">运行后显示图片</div>'}
         </div>
         <div class="image-resolution-badge" id="${id}-res" style="display:none"></div>
         <div class="node-field"><label>文件名前缀/文件名</label>
             <input type="text" id="${id}-filename" value="${rd.filename || 'generated_image'}" placeholder="不填则默认生成" /></div>
         <div class="save-btn-group">
-            <button class="save-btn-secondary" id="${id}-view-full" disabled>
+            <button class="save-btn-secondary" id="${id}-view-full" ${imageList.length > 0 ? '' : 'disabled'}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 查看图片
             </button>
-            <button class="save-btn" id="${id}-manual-save" disabled>
+            <button class="save-btn" id="${id}-manual-save" ${imageList.length > 0 ? '' : 'disabled'}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 保存
             </button>
@@ -639,7 +677,7 @@ function renderNodeBody(type, id, restoreData, state) {
     if (type === 'ImageGenerate') return renderImageGenerateBody(id, restoreData, state.models, state.providers);
     if (type === 'CameraControl') return renderCameraControlBody(id, restoreData);
     if (type === 'TextChat') return renderTextChatBody(id, restoreData, state.models, state.providers);
-    if (type === 'ImagePreview') return renderImagePreviewBody(id);
+    if (type === 'ImagePreview') return renderImagePreviewBody(id, restoreData);
     if (type === 'ImageMerge') return renderImageMergeBody(id);
     if (type === 'ImageCompare') return renderImageCompareBody(id);
     if (type === 'Text') return renderTextBody(id, restoreData);
