@@ -17,6 +17,7 @@ export const textChatNode = {
     outputs: [{ name: 'text', type: 'text', label: '回复文本' }],
     defaultWidth: 380,
     defaultHeight: 760,
+    minHeight: 420,
     restoreHeightCap: 1200,
     restoreHeightFallback: 760
 };

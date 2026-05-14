@@ -30,6 +30,7 @@ export function createNodeLifecycleApi({
     let pendingNodeSizeConnectionRefresh = null;
     const NODE_RESIZABLE_MEDIA_SELECTOR = '.file-drop-zone, .preview-container, .save-preview-container, .image-compare-container, .camera-control-node-preview';
     const NODE_SCROLL_CONTENT_SELECTOR = '.chat-response-area, .text-display-box';
+    const NODE_SCROLLABLE_RESULT_SELECTOR = `${NODE_SCROLL_CONTENT_SELECTOR}, .text-split-preview`;
     const FALLBACK_DEFAULT_NODE_WIDTH = 180;
     const FALLBACK_DEFAULT_NODE_HEIGHT = 120;
 
@@ -126,6 +127,11 @@ export function createNodeLifecycleApi({
         return Number.isFinite(height) && height > 0 ? height : FALLBACK_DEFAULT_NODE_HEIGHT;
     }
 
+    function getConfiguredMinimumHeight(config) {
+        const height = Number(config?.minHeight);
+        return Number.isFinite(height) && height > 0 ? height : getDefaultNodeHeight(config);
+    }
+
     function clampNodeWidthToDefault(width, config) {
         const defaultWidth = getDefaultNodeWidth(config);
         const numericWidth = Number(width);
@@ -178,6 +184,13 @@ export function createNodeLifecycleApi({
 
     function isResizableMediaElement(el) {
         return Boolean(el?.matches?.(NODE_RESIZABLE_MEDIA_SELECTOR));
+    }
+
+    function hasScrollableResultContent(el) {
+        return Boolean(
+            el?.matches?.(NODE_SCROLLABLE_RESULT_SELECTOR) ||
+            el?.querySelector?.(NODE_SCROLLABLE_RESULT_SELECTOR)
+        );
     }
 
     function measureTextWidth(text, font) {
@@ -353,12 +366,13 @@ export function createNodeLifecycleApi({
             ? Math.max(0, ...childSizes.map((size) => size.height))
             : childSizes.reduce((total, size) => total + size.height, 0) + Math.max(0, childSizes.length - 1) * gapY;
 
+        const calculatedHeight = Math.ceil(Math.max(minHeight, contentHeight + getBoxExtras(style, 'y')) + marginY);
+        const shouldUseRenderedHeightFloor = !hasScrollableResultContent(el);
         return {
             width: Math.ceil(Math.max(minWidth, contentWidth + getBoxExtras(style, 'x')) + marginX),
-            height: Math.max(
-                Math.ceil(Math.max(minHeight, contentHeight + getBoxExtras(style, 'y')) + marginY),
-                getRenderedHeightFloor(el, style, minHeight, marginY)
-            )
+            height: shouldUseRenderedHeightFloor
+                ? Math.max(calculatedHeight, getRenderedHeightFloor(el, style, minHeight, marginY))
+                : calculatedHeight
         };
     }
 
@@ -388,7 +402,7 @@ export function createNodeLifecycleApi({
         if (!el) {
             return {
                 minWidth: getDefaultNodeWidth(config),
-                minHeight: getDefaultNodeHeight(config)
+                minHeight: getConfiguredMinimumHeight(config)
             };
         }
 
@@ -420,7 +434,7 @@ export function createNodeLifecycleApi({
             body.style.display = 'none';
         }
         const bodySize = body && !isCollapsed ? getElementMinimumSize(body) : { width: 0, height: 0 };
-        const bodyRenderedHeight = body && !isCollapsed
+        const bodyRenderedHeight = body && !isCollapsed && !hasScrollableResultContent(body)
             ? Math.max(body.offsetHeight || 0, body.scrollHeight || 0)
             : 0;
 
@@ -439,7 +453,7 @@ export function createNodeLifecycleApi({
             minWidth: Math.max(getDefaultNodeWidth(config), headerWidth, portsRowSize.width, bodySize.width),
             minHeight: isCollapsed
                 ? contentMinHeight
-                : Math.max(getDefaultNodeHeight(config), contentMinHeight)
+                : Math.max(getConfiguredMinimumHeight(config), contentMinHeight)
         };
     }
 
@@ -483,7 +497,7 @@ export function createNodeLifecycleApi({
                     Number(node.minHeight) || 0
                 )
                 : Math.max(
-                    getDefaultNodeHeight(config),
+                    getConfiguredMinimumHeight(config),
                     Number.isFinite(configuredMinHeight) ? configuredMinHeight : 0,
                     Number(node.minHeight) || 0,
                     measured.minHeight
