@@ -179,6 +179,9 @@ export function createNodeLifecycleApi({
 
     function isVisibleElement(el) {
         if (!el) return false;
+        if (el.classList?.contains('node-select-native') || el.classList?.contains('node-select-panel')) {
+            return false;
+        }
         const style = getComputedStyle(el);
         return style.display !== 'none' && style.visibility !== 'collapse' && el.offsetParent !== null;
     }

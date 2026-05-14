@@ -334,12 +334,12 @@ export function createNodeDomBindingsApi({
                 event.stopPropagation();
                 if (button.disabled) return;
                 const nextValue = button.dataset.value || '';
+                closeNodeSelectDropdowns();
                 if (selectEl.value !== nextValue) {
                     selectEl.value = nextValue;
                     selectEl.dispatchEvent(new Event('input', { bubbles: true }));
                     selectEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
-                closeNodeSelectDropdowns();
             });
         });
     }
