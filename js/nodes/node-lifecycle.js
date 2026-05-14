@@ -2,6 +2,7 @@
  * 管理节点的创建、删除、选择、启停与尺寸自适应等生命周期行为。
  */
 import { NODE_DEFAULT_TYPES } from '../core/state.js';
+import { splitTextForTextSplitNode } from '../core/common-utils.js';
 
 export function createNodeLifecycleApi({
     state,
@@ -340,7 +341,8 @@ export function createNodeLifecycleApi({
             display.includes('grid') ||
             el.classList.contains('save-btn-group') ||
             el.classList.contains('image-resize-mode-group') ||
-            el.classList.contains('generation-count-control');
+            el.classList.contains('generation-count-control') ||
+            el.classList.contains('text-split-output-count-control');
         const childSizes = children.map((child) => getElementMinimumSize(child));
         const gapX = getLayoutGap(style, 'x');
         const gapY = getLayoutGap(style, 'y');
@@ -697,9 +699,23 @@ export function createNodeLifecycleApi({
         if (normalizedType === 'TextSplit') {
             nodeData.data.text = effectiveRestoreData?.text || effectiveRestoreData?.lastText || '';
             nodeData.data.delimiter = effectiveRestoreData?.delimiter || '';
+            const restoredParts = Array.isArray(effectiveRestoreData?.parts) ? effectiveRestoreData.parts.slice() : [];
+            const fallbackOutputCount = Math.max(1, restoredParts.length || splitTextForTextSplitNode(
+                nodeData.data.text,
+                effectiveRestoreData?.delimiter !== undefined ? effectiveRestoreData.delimiter : '\n\n',
+                { removeEmptyLines: effectiveRestoreData?.removeEmptyLines === true }
+            ).length);
+            if (effectiveRestoreData?.outputCount !== undefined && effectiveRestoreData.outputCount !== '') {
+                const parsedOutputCount = parseInt(effectiveRestoreData.outputCount, 10);
+                nodeData.data.outputCount = Number.isFinite(parsedOutputCount) ? Math.max(0, parsedOutputCount) : 1;
+            } else {
+                nodeData.data.outputCount = fallbackOutputCount;
+            }
             nodeData.data.removeEmptyLines = effectiveRestoreData?.removeEmptyLines === true;
             nodeData.data.previewEnabled = effectiveRestoreData?.previewEnabled === true;
-            nodeData.data.parts = Array.isArray(effectiveRestoreData?.parts) ? effectiveRestoreData.parts.slice() : [];
+            nodeData.data.parts = nodeData.data.outputCount === 0
+                ? restoredParts
+                : restoredParts.slice(0, nodeData.data.outputCount);
             nodeData.data.parts.forEach((part, index) => {
                 nodeData.data[`part_${index + 1}`] = part;
             });

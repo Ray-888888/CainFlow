@@ -90,13 +90,35 @@ export function createNodeDomBindingsApi({
             .replace(/'/g, '&#39;');
     }
 
-    function getTextSplitParts(id) {
+    function normalizeTextSplitOutputCountValue(value) {
+        const parsed = parseInt(value ?? '1', 10);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+    }
+
+    function sanitizeTextSplitOutputCountValue(value) {
+        return String(value ?? '').replace(/\D/g, '');
+    }
+
+    function getTextSplitOutputCount(id) {
+        const outputCountInput = documentRef.getElementById(`${id}-output-count`);
         const node = state.nodes.get(id);
-        const delimiterInput = documentRef.getElementById(`${id}-delimiter`);
-        const removeEmptyLinesInput = documentRef.getElementById(`${id}-remove-empty-lines`);
-        return splitTextForTextSplitNode(node?.data?.text || '', delimiterInput?.value || '', {
-            removeEmptyLines: removeEmptyLinesInput?.checked === true
-        });
+        return normalizeTextSplitOutputCountValue(outputCountInput?.value ?? node?.data?.outputCount ?? 1);
+    }
+
+    function limitTextSplitParts(parts, outputCount) {
+        return outputCount === 0 ? parts : parts.slice(0, Math.max(1, outputCount));
+    }
+
+    function getTextSplitRenderedOutputCount(parts, outputCount) {
+        return outputCount === 0 ? Math.max(1, parts.length) : Math.max(1, outputCount);
+    }
+
+    function getCurrentTextSplitRenderedOutputCount(id) {
+        const outputCount = getTextSplitOutputCount(id);
+        if (outputCount > 0) return outputCount;
+        const node = state.nodes.get(id);
+        const parts = Array.isArray(node?.data?.parts) ? node.data.parts : [];
+        return Math.max(1, parts.length);
     }
 
     function renderTextSplitOutputPort(id, index) {
@@ -105,10 +127,6 @@ export function createNodeDomBindingsApi({
                 <span class="port-label">片段 ${index + 1}</span>
                 <div class="port-dot type-text"></div>
             </div>`;
-    }
-
-    function getTextSplitOutputCount(id) {
-        return Math.max(1, getTextSplitParts(id).length);
     }
 
     function bindPortInteraction(portEl) {
@@ -320,7 +338,7 @@ export function createNodeDomBindingsApi({
         }
     }
 
-    function refreshTextSplitOutputPorts(nodeId, nextCount = getTextSplitOutputCount(nodeId)) {
+    function refreshTextSplitOutputPorts(nodeId, nextCount = getCurrentTextSplitRenderedOutputCount(nodeId)) {
         const node = state.nodes.get(nodeId);
         if (!node?.el) return;
         const outputsSection = node.el.querySelector('.node-outputs-section');
@@ -406,14 +424,22 @@ export function createNodeDomBindingsApi({
         const { refreshPorts = true } = options;
         const node = state.nodes.get(id);
         const delimiterInput = documentRef.getElementById(`${id}-delimiter`);
+        const outputCountInput = documentRef.getElementById(`${id}-output-count`);
         const removeEmptyLinesInput = documentRef.getElementById(`${id}-remove-empty-lines`);
         const previewEnabledInput = documentRef.getElementById(`${id}-preview-enabled`);
         if (!node || !delimiterInput) return;
 
+        const outputCount = getTextSplitOutputCount(id);
+        if (outputCountInput) {
+            outputCountInput.value = String(outputCount);
+        }
         const removeEmptyLines = removeEmptyLinesInput?.checked === true;
         const previewEnabled = previewEnabledInput?.checked === true;
-        const parts = splitTextForTextSplitNode(node.data?.text || '', delimiterInput.value, { removeEmptyLines });
+        const rawParts = splitTextForTextSplitNode(node.data?.text || '', delimiterInput.value, { removeEmptyLines });
+        const parts = limitTextSplitParts(rawParts, outputCount);
+        const renderedOutputCount = getTextSplitRenderedOutputCount(parts, outputCount);
         node.data.delimiter = delimiterInput.value;
+        node.data.outputCount = outputCount;
         node.data.removeEmptyLines = removeEmptyLines;
         node.data.previewEnabled = previewEnabled;
         node.data.parts = parts;
@@ -430,7 +456,10 @@ export function createNodeDomBindingsApi({
                 ? `按 ${JSON.stringify(delimiterInput.value)} 分割`
                 : '未设置分隔字符串，整段作为一个输出';
             const emptyLineText = removeEmptyLines ? '，已删除空行' : '';
-            summary.textContent = `${delimiterText}${emptyLineText}，当前 ${Math.max(1, parts.length)} 个输出端口`;
+            const outputText = outputCount === 0
+                ? `，自动生成 ${renderedOutputCount} 个输出端口`
+                : `，当前配置 ${outputCount} 个输出端口`;
+            summary.textContent = `${delimiterText}${emptyLineText}${outputText}`;
         }
 
         const preview = documentRef.getElementById(`${id}-split-preview`);
@@ -447,7 +476,7 @@ export function createNodeDomBindingsApi({
         }
 
         if (refreshPorts) {
-            refreshTextSplitOutputPorts(id, Math.max(1, parts.length));
+            refreshTextSplitOutputPorts(id, renderedOutputCount);
         }
 
         const requestFrame = documentRef.defaultView?.requestAnimationFrame;
@@ -926,7 +955,7 @@ export function createNodeDomBindingsApi({
                 fieldMinHeight += label.offsetHeight;
             });
 
-            field.querySelectorAll('input, select, textarea, .toggle-switch, .generation-count-control, .chat-response-wrapper, .text-display-box').forEach((control) => {
+            field.querySelectorAll('input, select, textarea, .toggle-switch, .generation-count-control, .text-split-output-count-control, .chat-response-wrapper, .text-display-box').forEach((control) => {
                 if (control.closest('.node-field') !== field) return;
                 if (control.matches('input, select, textarea')) {
                     fieldMinWidth = Math.max(fieldMinWidth, getControlContentWidth(control));
@@ -964,7 +993,7 @@ export function createNodeDomBindingsApi({
                 if (child.classList.contains('node-field')) {
                     const childStyle = getComputedStyle(child);
                     const label = child.querySelector(':scope > label');
-                    const control = child.querySelector(':scope > input, :scope > select, :scope > textarea, :scope > .generation-count-control, :scope > .chat-response-wrapper, :scope > .text-display-box');
+                    const control = child.querySelector(':scope > input, :scope > select, :scope > textarea, :scope > .generation-count-control, :scope > .text-split-output-count-control, :scope > .chat-response-wrapper, :scope > .text-display-box');
                     const fieldGap = getPx(childStyle, 'row-gap') || getPx(childStyle, 'gap');
                     const controlStyle = control ? getComputedStyle(control) : null;
                     const controlMinHeight = controlStyle ? getPx(controlStyle, 'min-height') : 0;
@@ -1253,6 +1282,27 @@ export function createNodeDomBindingsApi({
         } else if (type === 'Text') {
             syncTextNodeData(id);
         } else if (type === 'TextSplit') {
+            const outputCountInput = el.querySelector(`#${id}-output-count`);
+            outputCountInput?.addEventListener('input', () => {
+                const sanitized = sanitizeTextSplitOutputCountValue(outputCountInput.value);
+                if (outputCountInput.value !== sanitized) {
+                    outputCountInput.value = sanitized;
+                }
+            });
+            outputCountInput?.addEventListener('beforeinput', (event) => {
+                if (event.inputType?.startsWith('delete')) return;
+                if (event.data && /\D/.test(event.data)) event.preventDefault();
+            });
+            el.querySelectorAll('.text-split-output-count-btn').forEach((button) => {
+                button.addEventListener('click', () => {
+                    if (!outputCountInput) return;
+                    const delta = parseInt(button.dataset.delta || '0', 10) || 0;
+                    const currentValue = normalizeTextSplitOutputCountValue(outputCountInput.value);
+                    outputCountInput.value = String(Math.max(0, currentValue + delta));
+                    outputCountInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    outputCountInput.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            });
             syncTextSplitNodeData(id);
         }
 
@@ -1264,7 +1314,7 @@ export function createNodeDomBindingsApi({
                 input.addEventListener('input', () => syncTextNodeData(id));
                 input.addEventListener('change', () => syncTextNodeData(id));
             }
-            if (type === 'TextSplit' && (input.id === `${id}-delimiter` || input.id === `${id}-remove-empty-lines` || input.id === `${id}-preview-enabled`)) {
+            if (type === 'TextSplit' && (input.id === `${id}-delimiter` || input.id === `${id}-output-count` || input.id === `${id}-remove-empty-lines` || input.id === `${id}-preview-enabled`)) {
                 input.addEventListener('input', () => syncTextSplitNodeData(id));
                 input.addEventListener('change', () => syncTextSplitNodeData(id));
             }

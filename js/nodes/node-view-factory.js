@@ -61,16 +61,37 @@ function getTextSplitPreviewEnabledValue(restoreData = {}) {
     return rd.previewEnabled === true;
 }
 
-function getTextSplitOutputPorts(restoreData = {}) {
+function normalizeTextSplitOutputCountValue(value, fallback = 1) {
+    const parsed = parseInt(value ?? fallback, 10);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : Math.max(0, fallback);
+}
+
+function getTextSplitPartsFromRestoreData(restoreData = {}) {
     const rd = restoreData || {};
-    const parts = Array.isArray(rd.parts) && rd.parts.length > 0
-        ? rd.parts
-        : splitTextForTextSplitNode(
-            getTextSplitTextValue(rd),
-            getTextSplitDelimiterValue(rd),
-            { removeEmptyLines: getTextSplitRemoveEmptyLinesValue(rd) }
-        );
-    const count = Math.max(1, parts.length);
+    if (Array.isArray(rd.parts) && rd.parts.length > 0) return rd.parts;
+    return splitTextForTextSplitNode(
+        getTextSplitTextValue(rd),
+        getTextSplitDelimiterValue(rd),
+        { removeEmptyLines: getTextSplitRemoveEmptyLinesValue(rd) }
+    );
+}
+
+function getTextSplitOutputCountSettingValue(restoreData = {}) {
+    const rd = restoreData || {};
+    if (rd.outputCount !== undefined && rd.outputCount !== '') {
+        return normalizeTextSplitOutputCountValue(rd.outputCount);
+    }
+    return Math.max(1, getTextSplitPartsFromRestoreData(rd).length);
+}
+
+function getTextSplitRenderedOutputCountValue(restoreData = {}) {
+    const setting = getTextSplitOutputCountSettingValue(restoreData);
+    if (setting > 0) return setting;
+    return Math.max(1, getTextSplitPartsFromRestoreData(restoreData).length);
+}
+
+function getTextSplitOutputPorts(restoreData = {}) {
+    const count = getTextSplitRenderedOutputCountValue(restoreData);
     return Array.from({ length: count }, (_, index) => ({
         name: `part_${index + 1}`,
         type: 'text',
@@ -483,12 +504,22 @@ function renderTextBody(id, restoreData) {
 function renderTextSplitBody(id, restoreData) {
     const rd = restoreData || {};
     const delimiter = getTextSplitDelimiterValue(rd);
+    const outputCount = getTextSplitOutputCountSettingValue(rd);
     const removeEmptyLines = getTextSplitRemoveEmptyLinesValue(rd);
     const previewEnabled = getTextSplitPreviewEnabledValue(rd);
     return `
         <div class="node-field">
             <label>分隔字符串</label>
             <textarea id="${id}-delimiter" class="text-split-delimiter" placeholder="输入用于分割文本的字符串" rows="2"${getTextareaHeightStyle(rd, 'delimiter')}>${delimiter}</textarea>
+        </div>
+        <div class="node-field">
+            <label>输出数量</label>
+            <div class="text-split-output-count-control">
+                <button type="button" class="text-split-output-count-btn" data-target="${id}" data-delta="-1" title="减少输出数量">-</button>
+                <input type="text" id="${id}-output-count" class="text-split-output-count-input" inputmode="numeric" pattern="[0-9]*" value="${outputCount}" />
+                <button type="button" class="text-split-output-count-btn" data-target="${id}" data-delta="1" title="增加输出数量">+</button>
+            </div>
+            <div class="text-split-output-hint">设为 0 时根据分割结果自动生成输出端口</div>
         </div>
         <div class="node-field node-field-row">
             <label>删除空行</label>
